@@ -94,6 +94,7 @@ add_subdirectory(DetourTileCache)
 add_subdirectory(Recast)
 add_subdirectory(RecastBake)
 add_subdirectory(RecastServerNav)
+add_subdirectory(RecastServerNavDemo)
 
 configure_package_config_file(
     ${PROJECT_SOURCE_DIR}/recastnavigation-config.cmake.in
