@@ -724,6 +724,8 @@ void NavMeshTesterTool::recalc()
 					unsigned char steerPosFlag;
 					dtPolyRef steerPosRef;
 
+					app.buildContext.log(RC_LOG_WARNING, "geom load iterPos:{%f, %f, %f}", iterPos[0], iterPos[1], iterPos[2]);
+					app.buildContext.log(RC_LOG_WARNING, "geom load targetPos:{%f, %f, %f}", targetPos[0], targetPos[1], targetPos[2]);
 					if (!getSteerTarget(
 						sample->navQuery,
 						iterPos,

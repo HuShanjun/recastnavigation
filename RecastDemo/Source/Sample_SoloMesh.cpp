@@ -394,19 +394,19 @@ bool Sample_SoloMesh::build()
 
 	// Detour stores poly-mesh vertices as unsigned short (max 65535 per tile).
 	// A single Solo Mesh heightfield this large will hang or fail with no navmesh.
-	const int voxelCells = config.width * config.height;
-	if (config.width > 1024 || config.height > 1024 || voxelCells > 1000 * 1000)
-	{
-		buildContext->log(
-			RC_LOG_ERROR,
-			"buildNavigation: Voxel grid is %d x %d (%d cells). Solo Mesh cannot build a map this large "
-			"(Detour limit: 65535 verts per tile). Switch Sample to 'Tile Mesh', enable 'Build All Tiles', "
-			"and increase Cell Size (try 0.5 to 1.0).",
-			config.width,
-			config.height,
-			voxelCells);
-		return false;
-	}
+	// const int voxelCells = config.width * config.height;
+	// if (config.width > 1024 || config.height > 1024 || voxelCells > 1000 * 1000)
+	// {
+	// 	buildContext->log(
+	// 		RC_LOG_ERROR,
+	// 		"buildNavigation: Voxel grid is %d x %d (%d cells). Solo Mesh cannot build a map this large "
+	// 		"(Detour limit: 65535 verts per tile). Switch Sample to 'Tile Mesh', enable 'Build All Tiles', "
+	// 		"and increase Cell Size (try 0.5 to 1.0).",
+	// 		config.width,
+	// 		config.height,
+	// 		voxelCells);
+	// 	return false;
+	// }
 
 	// Reset build times gathering.
 	buildContext->resetTimers();
