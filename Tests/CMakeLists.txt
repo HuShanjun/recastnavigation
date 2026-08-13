@@ -1,3 +1,11 @@
+if(MSVC)
+	# Root CMake disables exceptions globally (/EHs-c-, _HAS_EXCEPTIONS=0).
+	# RebuildQueue needs std::thread; restore like RecastServerNav.
+	string(REPLACE "/EHs-c-" "/EHsc" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+	add_compile_definitions(_HAS_EXCEPTIONS=1)
+endif()
+
 add_executable(Tests)
 
 set_target_properties(Tests PROPERTIES
@@ -22,12 +30,6 @@ target_include_directories(Tests PRIVATE
 )
 
 target_compile_definitions(Tests PRIVATE TOML_EXCEPTIONS=0)
-
-# RebuildQueue uses std::thread; restore exceptions for Tests (root CMake disables them).
-if(MSVC)
-	target_compile_options(Tests PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/EHsc>)
-	target_compile_definitions(Tests PRIVATE _HAS_EXCEPTIONS=1)
-endif()
 
 target_sources(Tests PRIVATE 
 	Contrib/catch2/catch_amalgamated.cpp
