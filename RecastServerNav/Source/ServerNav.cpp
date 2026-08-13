@@ -1,6 +1,32 @@
 #include "RecastServerNav.h"
+#include "TileCacheSupport.h"
 
-struct ServerNav::Impl {
+#include "DetourNavMeshQuery.h"
+#include "DetourStatus.h"
+
+#include <cstdio>
+
+namespace
+{
+constexpr int QUERY_NODE_COUNT = 2048;
+}
+
+struct ServerNav::Impl
+{
+	TileCacheRuntime runtime;
+	dtNavMeshQuery* query = nullptr;
+
+	void clearQuery()
+	{
+		dtFreeNavMeshQuery(query);
+		query = nullptr;
+	}
+
+	void clear()
+	{
+		clearQuery();
+		destroyTileCacheRuntime(runtime);
+	}
 };
 
 ServerNav::ServerNav()
@@ -10,13 +36,36 @@ ServerNav::ServerNav()
 
 ServerNav::~ServerNav()
 {
-	delete m;
+	if (m)
+	{
+		m->clear();
+		delete m;
+		m = nullptr;
+	}
 }
 
 bool ServerNav::loadTileCacheSet(const char* path)
 {
-	(void)path;
-	return false;
+	if (!m || !path)
+	{
+		return false;
+	}
+
+	m->clearQuery();
+	if (!loadTileCacheSetFile(m->runtime, path))
+	{
+		m->clear();
+		return false;
+	}
+
+	m->query = dtAllocNavMeshQuery();
+	if (!m->query || dtStatusFailed(m->query->init(m->runtime.navMesh, QUERY_NODE_COUNT)))
+	{
+		std::printf("ERROR: failed to init dtNavMeshQuery\n");
+		m->clear();
+		return false;
+	}
+	return true;
 }
 
 void ServerNav::tick(float dt)
