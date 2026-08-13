@@ -18,9 +18,16 @@ target_include_directories(Tests PRIVATE
 	../RecastDemo/Include
 	../RecastBake
 	../RecastBake/thirdparty
+	../RecastServerNav/Source
 )
 
 target_compile_definitions(Tests PRIVATE TOML_EXCEPTIONS=0)
+
+# RebuildQueue uses std::thread; restore exceptions for Tests (root CMake disables them).
+if(MSVC)
+	target_compile_options(Tests PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/EHsc>)
+	target_compile_definitions(Tests PRIVATE _HAS_EXCEPTIONS=1)
+endif()
 
 target_sources(Tests PRIVATE 
 	Contrib/catch2/catch_amalgamated.cpp
@@ -34,6 +41,8 @@ target_sources(Tests PRIVATE
 	../RecastDemo/Source/PartitionedMesh.cpp
 	RecastBake/Tests_BakeConfig.cpp
 	../RecastBake/BakeConfig.cpp
+	RecastServerNav/Tests_RebuildQueue.cpp
+	../RecastServerNav/Source/RebuildQueue.cpp
 )
 
 target_link_libraries(Tests PRIVATE Recast Detour DetourCrowd)

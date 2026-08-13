@@ -11,6 +11,7 @@ add_library(RecastServerNav STATIC)
 target_sources(RecastServerNav PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/Source/ServerNav.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/Source/TileCacheSupport.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/Source/RebuildQueue.cpp
 	${CMAKE_SOURCE_DIR}/RecastDemo/Contrib/fastlz/fastlz.c
 )
 
