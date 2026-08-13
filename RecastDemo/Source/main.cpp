@@ -53,8 +53,13 @@ namespace
 constexpr float UPDATE_TIME = 1.0f / 60.0f;  // update at 60Hz
 constexpr float FOG_COLOR[4] = {0.32f, 0.31f, 0.30f, 1.0f};
 
-constexpr float CAM_MOVE_SPEED = 4.0f;
-constexpr float CAM_FAST_MOVE_SPEED = 22.0f;
+// Unity Scene View-style fly camera.
+constexpr float CAM_MOVE_SPEED = 22.0f;
+constexpr float CAM_FAST_MOVE_MULTIPLIER = 4.0f;
+constexpr float CAM_MOVE_ACCEL = 4.0f;
+constexpr float CAM_LOOK_SENSITIVITY = 0.25f;
+constexpr float CAM_PITCH_MIN = -89.0f;
+constexpr float CAM_PITCH_MAX = 89.0f;
 
 SampleItem g_samples[] = {
 	{.name = "Solo Mesh",      .create = []() { return std::make_unique<Sample_SoloMesh>(); }     },
@@ -66,6 +71,47 @@ constexpr ImGuiWindowFlags staticWindowFlags = ImGuiWindowFlags_NoMove
 	| ImGuiWindowFlags_NoResize
 	| ImGuiWindowFlags_NoSavedSettings
 	| ImGuiWindowFlags_NoCollapse;
+
+// Unity-style fly camera: WASD strafe/forward, Q down, E up, Shift sprint.
+void updateFlyCamera(AppState& appState, const GLdouble modelviewMatrix[16], float dt)
+{
+	const bool allowMove = !ImGui::GetIO().WantTextInput;
+	const Uint8* keystate = SDL_GetKeyboardState(nullptr);
+
+	const bool keyW = allowMove && (keystate[SDL_SCANCODE_W] || keystate[SDL_SCANCODE_UP]);
+	const bool keyA = allowMove && (keystate[SDL_SCANCODE_A] || keystate[SDL_SCANCODE_LEFT]);
+	const bool keyS = allowMove && (keystate[SDL_SCANCODE_S] || keystate[SDL_SCANCODE_DOWN]);
+	const bool keyD = allowMove && (keystate[SDL_SCANCODE_D] || keystate[SDL_SCANCODE_RIGHT]);
+	const bool keyE = allowMove && (keystate[SDL_SCANCODE_E] || keystate[SDL_SCANCODE_PAGEUP]);
+	const bool keyQ = allowMove && (keystate[SDL_SCANCODE_Q] || keystate[SDL_SCANCODE_PAGEDOWN]);
+
+	appState.moveFront = rcClamp(appState.moveFront + dt * CAM_MOVE_ACCEL * (keyW ? 1.0f : -1.0f), 0.0f, 1.0f);
+	appState.moveLeft = rcClamp(appState.moveLeft + dt * CAM_MOVE_ACCEL * (keyA ? 1.0f : -1.0f), 0.0f, 1.0f);
+	appState.moveBack = rcClamp(appState.moveBack + dt * CAM_MOVE_ACCEL * (keyS ? 1.0f : -1.0f), 0.0f, 1.0f);
+	appState.moveRight = rcClamp(appState.moveRight + dt * CAM_MOVE_ACCEL * (keyD ? 1.0f : -1.0f), 0.0f, 1.0f);
+	appState.moveUp = rcClamp(appState.moveUp + dt * CAM_MOVE_ACCEL * (keyE ? 1.0f : -1.0f), 0.0f, 1.0f);
+	appState.moveDown = rcClamp(appState.moveDown + dt * CAM_MOVE_ACCEL * (keyQ ? 1.0f : -1.0f), 0.0f, 1.0f);
+
+	float keybSpeed = CAM_MOVE_SPEED;
+	if (allowMove && (SDL_GetModState() & KMOD_SHIFT))
+	{
+		keybSpeed *= CAM_FAST_MOVE_MULTIPLIER;
+	}
+
+	const float moveX = (appState.moveRight - appState.moveLeft) * keybSpeed * dt;
+	const float moveY = (appState.moveBack - appState.moveFront) * keybSpeed * dt + appState.scrollZoom * 2.0f;
+	appState.scrollZoom = 0;
+
+	appState.cameraPos[0] += moveX * static_cast<float>(modelviewMatrix[0]);
+	appState.cameraPos[1] += moveX * static_cast<float>(modelviewMatrix[4]);
+	appState.cameraPos[2] += moveX * static_cast<float>(modelviewMatrix[8]);
+
+	appState.cameraPos[0] += moveY * static_cast<float>(modelviewMatrix[2]);
+	appState.cameraPos[1] += moveY * static_cast<float>(modelviewMatrix[6]);
+	appState.cameraPos[2] += moveY * static_cast<float>(modelviewMatrix[10]);
+
+	appState.cameraPos[1] += (appState.moveUp - appState.moveDown) * keybSpeed * dt;
+}
 }
 
 AppState app;
@@ -213,13 +259,13 @@ int main(int /*argc*/, char** /*argv*/)
 			case SDL_MOUSEBUTTONDOWN:
 				if (event.button.button == SDL_BUTTON_RIGHT && !app.mouseOverMenu)
 				{
-					// Rotate view
+					// Unity-style look: hide cursor and use unbounded relative motion.
 					app.isRotatingCamera = true;
 					app.movedDuringRotate = false;
-					app.origMousePos[0] = app.mousePos[0];
-					app.origMousePos[1] = app.mousePos[1];
-					app.origCameraEulers[0] = app.cameraEulers[0];
-					app.origCameraEulers[1] = app.cameraEulers[1];
+					app.ignoreNextLookDelta = true;
+					app.origMousePos[0] = event.button.x;
+					app.origMousePos[1] = event.button.y;
+					SDL_SetRelativeMouseMode(SDL_TRUE);
 				}
 				break;
 
@@ -227,6 +273,13 @@ int main(int /*argc*/, char** /*argv*/)
 				// Handle mouse clicks here.
 				if (event.button.button == SDL_BUTTON_RIGHT)
 				{
+					if (app.isRotatingCamera)
+					{
+						SDL_SetRelativeMouseMode(SDL_FALSE);
+						SDL_WarpMouseInWindow(app.window, app.origMousePos[0], app.origMousePos[1]);
+						app.mousePos[0] = app.origMousePos[0];
+						app.mousePos[1] = app.height - 1 - app.origMousePos[1];
+					}
 					app.isRotatingCamera = false;
 					if (!app.mouseOverMenu && !app.movedDuringRotate)
 					{
@@ -245,19 +298,27 @@ int main(int /*argc*/, char** /*argv*/)
 				break;
 
 			case SDL_MOUSEMOTION:
-				app.mousePos[0] = event.motion.x;
-				app.mousePos[1] = app.height - 1 - event.motion.y;
-
 				if (app.isRotatingCamera)
 				{
-					int dx = app.mousePos[0] - app.origMousePos[0];
-					int dy = app.mousePos[1] - app.origMousePos[1];
-					app.cameraEulers[0] = app.origCameraEulers[0] - static_cast<float>(dy) * 0.25f;
-					app.cameraEulers[1] = app.origCameraEulers[1] + static_cast<float>(dx) * 0.25f;
-					if (dx * dx + dy * dy > 3 * 3)
+					if (app.ignoreNextLookDelta)
 					{
-						app.movedDuringRotate = true;
+						app.ignoreNextLookDelta = false;
 					}
+					else
+					{
+						app.cameraEulers[0] -= static_cast<float>(event.motion.yrel) * CAM_LOOK_SENSITIVITY;
+						app.cameraEulers[1] += static_cast<float>(event.motion.xrel) * CAM_LOOK_SENSITIVITY;
+						app.cameraEulers[0] = rcClamp(app.cameraEulers[0], CAM_PITCH_MIN, CAM_PITCH_MAX);
+						if (event.motion.xrel * event.motion.xrel + event.motion.yrel * event.motion.yrel > 3 * 3)
+						{
+							app.movedDuringRotate = true;
+						}
+					}
+				}
+				else
+				{
+					app.mousePos[0] = event.motion.x;
+					app.mousePos[1] = app.height - 1 - event.motion.y;
 				}
 				break;
 
@@ -267,6 +328,11 @@ int main(int /*argc*/, char** /*argv*/)
 				{
 					app.updateWindowSize();
 					app.updateUIScale();
+				}
+				else if (event.window.event == SDL_WINDOWEVENT_FOCUS_LOST && app.isRotatingCamera)
+				{
+					SDL_SetRelativeMouseMode(SDL_FALSE);
+					app.isRotatingCamera = false;
 				}
 			}
 			break;
@@ -352,29 +418,7 @@ int main(int /*argc*/, char** /*argv*/)
 		app.rayEnd[1] = static_cast<float>(y);
 		app.rayEnd[2] = static_cast<float>(z);
 
-		// Keyboard movement.
-		const Uint8* keystate = SDL_GetKeyboardState(NULL);
-		app.moveFront = rcClamp(app.moveFront + dt * 4 * ((keystate[SDL_SCANCODE_W] || keystate[SDL_SCANCODE_UP]) ? 1.0f : -1.0f), 0.0f, 1.0f);
-		app.moveLeft = rcClamp(app.moveLeft + dt * 4 * ((keystate[SDL_SCANCODE_A] || keystate[SDL_SCANCODE_LEFT]) ? 1.0f : -1.0f), 0.0f, 1.0f);
-		app.moveBack = rcClamp(app.moveBack + dt * 4 * ((keystate[SDL_SCANCODE_S] || keystate[SDL_SCANCODE_DOWN]) ? 1.0f : -1.0f), 0.0f, 1.0f);
-		app.moveRight = rcClamp(app.moveRight + dt * 4 * ((keystate[SDL_SCANCODE_D] || keystate[SDL_SCANCODE_RIGHT]) ? 1.0f : -1.0f), 0.0f, 1.0f);
-		app.moveUp = rcClamp(app.moveUp + dt * 4 * ((keystate[SDL_SCANCODE_Q] || keystate[SDL_SCANCODE_PAGEUP]) ? 1.0f : -1.0f), 0.0f, 1.0f);
-		app.moveDown = rcClamp(app.moveDown + dt * 4 * ((keystate[SDL_SCANCODE_E] || keystate[SDL_SCANCODE_PAGEDOWN]) ? 1.0f : -1.0f), 0.0f, 1.0f);
-
-		const float keybSpeed = (SDL_GetModState() & KMOD_SHIFT) ? CAM_MOVE_SPEED : CAM_FAST_MOVE_SPEED;
-		float moveX = (app.moveRight - app.moveLeft) * keybSpeed * dt;
-		float moveY = (app.moveBack - app.moveFront) * keybSpeed * dt + app.scrollZoom * 2.0f;
-		app.scrollZoom = 0;
-
-		app.cameraPos[0] += moveX * static_cast<float>(modelviewMatrix[0]);
-		app.cameraPos[1] += moveX * static_cast<float>(modelviewMatrix[4]);
-		app.cameraPos[2] += moveX * static_cast<float>(modelviewMatrix[8]);
-
-		app.cameraPos[0] += moveY * static_cast<float>(modelviewMatrix[2]);
-		app.cameraPos[1] += moveY * static_cast<float>(modelviewMatrix[6]);
-		app.cameraPos[2] += moveY * static_cast<float>(modelviewMatrix[10]);
-
-		app.cameraPos[1] += (app.moveUp - app.moveDown) * keybSpeed * dt;
+		updateFlyCamera(app, modelviewMatrix, dt);
 
 		// Draw the mesh
 		glEnable(GL_FOG);
@@ -408,7 +452,7 @@ int main(int /*argc*/, char** /*argv*/)
 		if (app.showMenu)
 		{
 			// Help text.
-			DrawScreenspaceText(280.0f, 20.0f, IM_COL32(255, 255, 255, 128), "W/A/S/D: Move  RMB: Rotate");
+			DrawScreenspaceText(280.0f, 20.0f, IM_COL32(255, 255, 255, 128), "WASD: Move  Q/E: Down/Up  Shift: Fast  RMB: Look");
 
 			constexpr int uiColumnWidth = 250;
 			constexpr int uiWindowPadding = 10;

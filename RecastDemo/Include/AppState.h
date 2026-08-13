@@ -37,13 +37,12 @@ struct AppState
 
 	// Input
 	int mousePos[2]{0, 0};
-	int origMousePos[2]{0, 0};  // Used to compute mouse movement totals across frames.
+	int origMousePos[2]{0, 0};  // Used to restore cursor after relative-look.
 
 	// Camera
 	float cameraEulers[2]{45, -45};
 	float cameraPos[3] = {0, 0, 0};  // world space
 	float camr = 1000;
-	float origCameraEulers[2] = {0, 0};  // Used to compute rotational changes across frames.
 	float scrollZoom = 0;
 
 	// Movement
@@ -57,6 +56,7 @@ struct AppState
 	// Input state
 	bool isRotatingCamera = false;
 	bool movedDuringRotate = false;
+	bool ignoreNextLookDelta = false;  // Drop the warp event after entering relative look.
 	bool mouseOverMenu = false;
 
 	// Raycasts
