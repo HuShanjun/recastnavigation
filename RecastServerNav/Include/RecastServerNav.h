@@ -32,6 +32,8 @@ public:
 	unsigned int addPermanentBox(const float* bmin, const float* bmax);
 	bool removePermanentBox(unsigned int id);
 	bool commitPermanentBounds(const float* bmin, const float* bmax);
+	/// Number of tiles that would be enqueued for the AABB (0 if unavailable).
+	int countTilesForBounds(const float* bmin, const float* bmax) const;
 
 	bool findPath(const float* start, const float* end, PathResult& out);
 

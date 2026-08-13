@@ -1,6 +1,5 @@
 #include "RecastServerNav.h"
 
-#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -11,6 +10,7 @@ namespace
 {
 constexpr float kDefaultStart[3] = {6.054083f, -2.365402f, 3.330421f};
 constexpr float kDefaultEnd[3] = {19.041592f, -2.368713f, -7.404587f};
+constexpr int kRebuildTicks = 512;
 
 void printPath(const char* label, const PathResult& path)
 {
@@ -32,11 +32,58 @@ ServerBakeParams tempObstaclesBakeParams()
 	return bake;
 }
 
+struct RebuildWaitState
+{
+	int expected = 0;
+	int completed = 0;
+	int okCount = 0;
+};
+
 void onRebuildCompleted(int tx, int ty, bool ok, void* user)
 {
-	auto* count = static_cast<std::atomic<int>*>(user);
-	++(*count);
-	std::printf("rebuild completed: tx=%d ty=%d ok=%d\n", tx, ty, ok ? 1 : 0);
+	auto* state = static_cast<RebuildWaitState*>(user);
+	++state->completed;
+	if (ok)
+		++state->okCount;
+	std::printf(
+		"rebuild completed: tx=%d ty=%d ok=%d (done=%d/%d)\n",
+		tx,
+		ty,
+		ok ? 1 : 0,
+		state->completed,
+		state->expected);
+}
+
+bool waitAllRebuilds(ServerNav& nav, RebuildWaitState& state)
+{
+	for (int i = 0; i < kRebuildTicks && state.completed < state.expected; ++i)
+	{
+		nav.tick(0.016f);
+		if (state.completed < state.expected)
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
+	for (int i = 0; i < 256 && state.completed < state.expected; ++i)
+		nav.tick(0.0f);
+
+	if (state.completed < state.expected)
+	{
+		std::fprintf(
+			stderr,
+			"FAIL: expected %d rebuild callbacks, got %d\n",
+			state.expected,
+			state.completed);
+		return false;
+	}
+	if (state.okCount != state.expected)
+	{
+		std::fprintf(
+			stderr,
+			"FAIL: expected all %d rebuilds ok, okCount=%d\n",
+			state.expected,
+			state.okCount);
+		return false;
+	}
+	return true;
 }
 } // namespace
 
@@ -85,6 +132,14 @@ int main(int argc, char** argv)
 		center[1] + halfExtents[1],
 		center[2] + halfExtents[2]};
 
+	const int expectedTiles = nav.countTilesForBounds(bmin, bmax);
+	if (expectedTiles < 2)
+	{
+		std::fprintf(stderr, "FAIL: expected multi-tile AABB, got %d\n", expectedTiles);
+		return 1;
+	}
+	std::printf("OK: AABB covers %d tiles\n", expectedTiles);
+
 	const unsigned int boxId = nav.addPermanentBox(bmin, bmax);
 	if (!boxId)
 	{
@@ -92,8 +147,9 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
-	std::atomic<int> completions{0};
-	nav.setRebuildCompletedCallback(onRebuildCompleted, &completions);
+	RebuildWaitState waitState;
+	waitState.expected = expectedTiles;
+	nav.setRebuildCompletedCallback(onRebuildCompleted, &waitState);
 
 	if (!nav.commitPermanentBounds(bmin, bmax))
 	{
@@ -102,42 +158,54 @@ int main(int argc, char** argv)
 	}
 	std::printf("OK: committed permanent box id=%u\n", boxId);
 
-	for (int i = 0; i < 512 && completions.load() == 0; ++i)
-	{
-		nav.tick(0.016f);
-		if (completions.load() == 0)
-		{
-			std::this_thread::sleep_for(std::chrono::milliseconds(1));
-		}
-	}
-	// Drain remaining completions for multi-tile commits.
-	for (int i = 0; i < 256; ++i)
-	{
-		nav.tick(0.0f);
-	}
-
-	if (completions.load() <= 0)
-	{
-		std::fprintf(stderr, "FAIL: no rebuild callbacks\n");
+	if (!waitAllRebuilds(nav, waitState))
 		return 1;
-	}
-	std::printf("OK: rebuild callbacks=%d\n", completions.load());
+	std::printf("OK: rebuild callbacks=%d all ok\n", waitState.completed);
 
 	PathResult after;
 	const bool afterOk = nav.findPath(kDefaultStart, kDefaultEnd, after);
 	if (!afterOk)
 	{
 		std::printf("OK: findPath blocked after permanent rebuild (no temp obstacle)\n");
-		return 0;
+	}
+	else
+	{
+		printPath("after", after);
+		if (!after.partial && after.straightPath == before.straightPath)
+		{
+			std::fprintf(stderr, "FAIL: path unchanged after permanent box (expected block/detour)\n");
+			return 1;
+		}
+		std::printf("OK: path changed/partial after permanent rebuild (no temp obstacle)\n");
 	}
 
-	printPath("after", after);
-	if (!after.partial && after.straightPath == before.straightPath)
+	if (!nav.removePermanentBox(boxId))
 	{
-		std::fprintf(stderr, "FAIL: path unchanged after permanent box (expected block/detour)\n");
+		std::fprintf(stderr, "FAIL: removePermanentBox\n");
 		return 1;
 	}
+	waitState = {};
+	waitState.expected = expectedTiles;
+	if (!nav.commitPermanentBounds(bmin, bmax))
+	{
+		std::fprintf(stderr, "FAIL: commit after removePermanentBox\n");
+		return 1;
+	}
+	if (!waitAllRebuilds(nav, waitState))
+		return 1;
 
-	std::printf("OK: path changed/partial after permanent rebuild (no temp obstacle)\n");
+	PathResult restored;
+	if (!nav.findPath(kDefaultStart, kDefaultEnd, restored) || restored.straightPath.size() < 6)
+	{
+		std::fprintf(stderr, "FAIL: findPath after removePermanentBox\n");
+		return 1;
+	}
+	printPath("restored", restored);
+	if (restored.partial || restored.straightPath != before.straightPath)
+	{
+		std::fprintf(stderr, "FAIL: path not restored after removePermanentBox + commit\n");
+		return 1;
+	}
+	std::printf("OK: path restored after removePermanentBox + commit\n");
 	return 0;
 }

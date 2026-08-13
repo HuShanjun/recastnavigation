@@ -29,4 +29,5 @@ TEST_CASE("PermanentBoxes commit fails without base mesh")
 
 	REQUIRE(nav.addPermanentBox(bmin, bmax) != 0u);
 	REQUIRE_FALSE(nav.commitPermanentBounds(bmin, bmax));
+	REQUIRE(nav.countTilesForBounds(bmin, bmax) == 0);
 }

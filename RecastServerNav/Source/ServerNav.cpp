@@ -440,6 +440,22 @@ bool ServerNav::commitPermanentBounds(const float* bmin, const float* bmax)
 	return m->rebuildQueue->enqueueTiles(tiles);
 }
 
+int ServerNav::countTilesForBounds(const float* bmin, const float* bmax) const
+{
+	if (!m || !bmin || !bmax || !m->runtime.navMesh)
+	{
+		return 0;
+	}
+	const dtNavMeshParams* params = m->runtime.navMesh->getParams();
+	if (!params)
+	{
+		return 0;
+	}
+	std::vector<std::pair<int, int>> tiles;
+	collectTilesForBounds(params, bmin, bmax, tiles);
+	return static_cast<int>(tiles.size());
+}
+
 bool ServerNav::findPath(const float* start, const float* end, PathResult& out)
 {
 	out = {};
