@@ -13,7 +13,10 @@ else()
 	target_compile_options(Tests PRIVATE -Wno-error)
 endif()
 
-target_include_directories(Tests PRIVATE ./Contrib)
+target_include_directories(Tests PRIVATE
+	./Contrib
+	../RecastDemo/Include
+)
 
 target_sources(Tests PRIVATE 
 	Contrib/catch2/catch_amalgamated.cpp
@@ -23,6 +26,8 @@ target_sources(Tests PRIVATE
 	Recast/Tests_Recast.cpp
 	Recast/Tests_RecastFilter.cpp
 	Recast/Tests_RecastRasterization.cpp
+	RecastDemo/Tests_PartitionedMesh.cpp
+	../RecastDemo/Source/PartitionedMesh.cpp
 )
 
 target_link_libraries(Tests PRIVATE Recast Detour DetourCrowd)

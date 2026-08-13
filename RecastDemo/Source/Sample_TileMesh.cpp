@@ -357,16 +357,7 @@ void Sample_TileMesh::render()
 	// Draw mesh
 	if (currentDrawMode != DrawMode::NAVMESH_TRANS)
 	{
-		// Draw mesh
-		duDebugDrawTriMeshSlope(
-			&debugDraw,
-			inputGeometry->mesh.verts.data(),
-			inputGeometry->mesh.getVertCount(),
-			inputGeometry->mesh.tris.data(),
-			inputGeometry->mesh.normals.data(),
-			inputGeometry->mesh.getTriCount(),
-			agentMaxSlope,
-			texScale);
+		drawInputMesh(texScale);
 		inputGeometry->drawOffMeshConnections(&debugDraw);
 	}
 
@@ -422,7 +413,10 @@ void Sample_TileMesh::render()
 	{
 		if (currentDrawMode != DrawMode::NAVMESH_INVIS)
 		{
+			glEnable(GL_POLYGON_OFFSET_FILL);
+			glPolygonOffset(-1.0f, -1.0f);
 			duDebugDrawNavMeshWithClosedList(&debugDraw, *navMesh, *navQuery, navMeshDrawFlags);
+			glDisable(GL_POLYGON_OFFSET_FILL);
 		}
 		if (currentDrawMode == DrawMode::NAVMESH_BVTREE)
 		{

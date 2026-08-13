@@ -59,6 +59,21 @@ protected:
 /// OpenGL debug draw implementation.
 class DebugDrawGL : public duDebugDraw
 {
+	struct CachedTriVertex
+	{
+		float pos[3];
+		unsigned int color;
+		float uv[2];
+	};
+
+	std::vector<CachedTriVertex> triMeshCache;
+	const float* triMeshCacheVerts = nullptr;
+	const int* triMeshCacheTris = nullptr;
+	const float* triMeshCacheNormals = nullptr;
+	int triMeshCacheTriCount = -1;
+	float triMeshCacheSlope = 0.0f;
+	float triMeshCacheTexScale = 0.0f;
+
 public:
 	void depthMask(bool state) override;
 	void texture(bool state) override;
@@ -68,6 +83,16 @@ public:
 	void vertex(float x, float y, float z, unsigned int color) override;
 	void vertex(float x, float y, float z, unsigned int color, float u, float v) override;
 	void end() override;
+
+	/// Draw an input triangle mesh with a CPU-side vertex cache (one glDrawArrays call).
+	void drawTriMeshSlopeCached(
+		const float* verts,
+		int nverts,
+		const int* tris,
+		const float* normals,
+		int ntris,
+		float walkableSlopeAngle,
+		float texScale);
 };
 
 /// stdio file implementation.

@@ -123,6 +123,23 @@ void Sample::drawToolsUI() {}
 
 void Sample::drawDebugUI() {}
 
+void Sample::drawInputMesh(float texScale)
+{
+	if (!inputGeometry || inputGeometry->mesh.getTriCount() == 0)
+	{
+		return;
+	}
+
+	debugDraw.drawTriMeshSlopeCached(
+		inputGeometry->mesh.verts.data(),
+		inputGeometry->mesh.getVertCount(),
+		inputGeometry->mesh.tris.data(),
+		inputGeometry->mesh.normals.data(),
+		inputGeometry->mesh.getTriCount(),
+		agentMaxSlope,
+		texScale);
+}
+
 void Sample::render()
 {
 	if (!inputGeometry)
@@ -130,16 +147,7 @@ void Sample::render()
 		return;
 	}
 
-	// Draw mesh
-	duDebugDrawTriMesh(
-		&debugDraw,
-		inputGeometry->mesh.verts.data(),
-		inputGeometry->mesh.getVertCount(),
-		inputGeometry->mesh.tris.data(),
-		inputGeometry->mesh.normals.data(),
-		inputGeometry->mesh.getTriCount(),
-		0,
-		1.0f);
+	drawInputMesh(1.0f);
 	// Draw bounds
 	duDebugDrawBoxWire(
 		&debugDraw,

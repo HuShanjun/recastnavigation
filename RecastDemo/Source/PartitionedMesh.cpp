@@ -32,16 +32,20 @@ namespace
 {
 int compareMinX(const void* va, const void* vb)
 {
-	return static_cast<int>(static_cast<const IndexedBounds*>(va)->bmin[0] - static_cast<const IndexedBounds*>(vb)->bmin[0]);
+	const float a = static_cast<const IndexedBounds*>(va)->bmin[0];
+	const float b = static_cast<const IndexedBounds*>(vb)->bmin[0];
+	return (a > b) - (a < b);
 }
 
 int compareMinY(const void* va, const void* vb)
 {
-	return static_cast<int>(static_cast<const IndexedBounds*>(va)->bmin[1] - static_cast<const IndexedBounds*>(vb)->bmin[1]);
+	const float a = static_cast<const IndexedBounds*>(va)->bmin[1];
+	const float b = static_cast<const IndexedBounds*>(vb)->bmin[1];
+	return (a > b) - (a < b);
 }
 
 /// Calculates the total extent of all bounds in the given index range
-void calcTotalBounds(const std::vector<IndexedBounds> bounds, const int start, const int end, float* outBMin, float* outBMax)
+void calcTotalBounds(const std::vector<IndexedBounds>& bounds, const int start, const int end, float* outBMin, float* outBMax)
 {
 	outBMin[0] = bounds[start].bmin[0];
 	outBMin[1] = bounds[start].bmin[1];
@@ -61,7 +65,7 @@ void calcTotalBounds(const std::vector<IndexedBounds> bounds, const int start, c
 }
 
 void subdivide(
-	std::vector<IndexedBounds> triBounds,
+	std::vector<IndexedBounds>& triBounds,
 	int imin,
 	int imax,
 	int trisPerChunk,
@@ -212,17 +216,18 @@ void PartitionedMesh::PartitionMesh(const float* verts, const int* tris, int num
 	int curNode = 0;
 	subdivide(triBounds, 0, numTris, trisPerChunk, curNode, nodes.data(), numChunks * 4, curTri, this->tris.data(), tris);
 	nnodes = curNode;
+	nodes.resize(nnodes);
 
 	// Calc max tris per chunk.
 	maxTrisPerChunk = 0;
-	for (auto& node : nodes)
+	for (int i = 0; i < nnodes; ++i)
 	{
 		// Skip if it's not a leaf node
-		if (node.triIndex < 0)
+		if (nodes[i].triIndex < 0)
 		{
 			continue;
 		}
-		maxTrisPerChunk = std::max(maxTrisPerChunk, node.numTris);
+		maxTrisPerChunk = std::max(maxTrisPerChunk, nodes[i].numTris);
 	}
 }
 

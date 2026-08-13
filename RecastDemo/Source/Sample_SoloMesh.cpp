@@ -100,6 +100,18 @@ void Sample_SoloMesh::drawSettingsUI()
 	}
 
 	ImGui::Text("Build Time: %.1fms", totalBuildTimeMs);
+
+	if (inputGeometry)
+	{
+		int gridWidth = 0;
+		int gridHeight = 0;
+		rcCalcGridSize(inputGeometry->getNavMeshBoundsMin(), inputGeometry->getNavMeshBoundsMax(), cellSize, &gridWidth, &gridHeight);
+		if (gridWidth > 1024 || gridHeight > 1024 || gridWidth * gridHeight > 1000 * 1000)
+		{
+			ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.3f, 1.0f), "Grid %d x %d is too large for Solo Mesh.", gridWidth, gridHeight);
+			ImGui::TextWrapped("Use Sample 'Tile Mesh' + Build All Tiles, and raise Cell Size (0.5-1.0).");
+		}
+	}
 }
 
 void Sample_SoloMesh::drawToolsUI()
@@ -186,16 +198,7 @@ void Sample_SoloMesh::render()
 
 	if (currentDrawMode != DrawMode::NAVMESH_TRANS)
 	{
-		// Draw mesh
-		duDebugDrawTriMeshSlope(
-			&debugDraw,
-			inputGeometry->mesh.verts.data(),
-			inputGeometry->mesh.getVertCount(),
-			inputGeometry->mesh.tris.data(),
-			inputGeometry->mesh.normals.data(),
-			inputGeometry->mesh.getTriCount(),
-			agentMaxSlope,
-			texScale);
+		drawInputMesh(texScale);
 		inputGeometry->drawOffMeshConnections(&debugDraw);
 	}
 
@@ -226,7 +229,10 @@ void Sample_SoloMesh::render()
 	{
 		if (currentDrawMode != DrawMode::NAVMESH_INVIS)
 		{
+			glEnable(GL_POLYGON_OFFSET_FILL);
+			glPolygonOffset(-1.0f, -1.0f);
 			duDebugDrawNavMeshWithClosedList(&debugDraw, *navMesh, *navQuery, navMeshDrawFlags);
+			glDisable(GL_POLYGON_OFFSET_FILL);
 		}
 		if (currentDrawMode == DrawMode::NAVMESH_BVTREE)
 		{
@@ -385,6 +391,22 @@ bool Sample_SoloMesh::build()
 	rcVcopy(config.bmin, boundsMin);
 	rcVcopy(config.bmax, boundsMax);
 	rcCalcGridSize(config.bmin, config.bmax, config.cs, &config.width, &config.height);
+
+	// Detour stores poly-mesh vertices as unsigned short (max 65535 per tile).
+	// A single Solo Mesh heightfield this large will hang or fail with no navmesh.
+	const int voxelCells = config.width * config.height;
+	if (config.width > 1024 || config.height > 1024 || voxelCells > 1000 * 1000)
+	{
+		buildContext->log(
+			RC_LOG_ERROR,
+			"buildNavigation: Voxel grid is %d x %d (%d cells). Solo Mesh cannot build a map this large "
+			"(Detour limit: 65535 verts per tile). Switch Sample to 'Tile Mesh', enable 'Build All Tiles', "
+			"and increase Cell Size (try 0.5 to 1.0).",
+			config.width,
+			config.height,
+			voxelCells);
+		return false;
+	}
 
 	// Reset build times gathering.
 	buildContext->resetTimers();
@@ -714,7 +736,11 @@ bool Sample_SoloMesh::build()
 
 		if (!dtCreateNavMeshData(&params, &navData, &navDataSize))
 		{
-			buildContext->log(RC_LOG_ERROR, "Could not build Detour navmesh.");
+			buildContext->log(
+				RC_LOG_ERROR,
+				"Could not build Detour navmesh. (verts=%d polys=%d; Detour max verts is 65534. Use Tile Mesh for large maps.)",
+				polyMesh->nverts,
+				polyMesh->npolys);
 			return false;
 		}
 

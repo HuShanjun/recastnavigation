@@ -3,6 +3,7 @@
 #include "SDL_opengl.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdarg>
 
 #ifdef WIN32
@@ -260,6 +261,97 @@ void DebugDrawGL::end()
 	glEnd();
 	glLineWidth(1.0f);
 	glPointSize(1.0f);
+}
+
+void DebugDrawGL::drawTriMeshSlopeCached(
+	const float* verts,
+	int /*nverts*/,
+	const int* tris,
+	const float* normals,
+	int ntris,
+	float walkableSlopeAngle,
+	float texScale)
+{
+	if (!verts || !tris || !normals || ntris <= 0)
+	{
+		return;
+	}
+
+	const bool dirty = triMeshCacheVerts != verts
+		|| triMeshCacheTris != tris
+		|| triMeshCacheNormals != normals
+		|| triMeshCacheTriCount != ntris
+		|| triMeshCacheSlope != walkableSlopeAngle
+		|| triMeshCacheTexScale != texScale;
+
+	if (dirty)
+	{
+		triMeshCacheVerts = verts;
+		triMeshCacheTris = tris;
+		triMeshCacheNormals = normals;
+		triMeshCacheTriCount = ntris;
+		triMeshCacheSlope = walkableSlopeAngle;
+		triMeshCacheTexScale = texScale;
+
+		const float walkableThr = cosf(walkableSlopeAngle / 180.0f * DU_PI);
+		const unsigned int unwalkable = duRGBA(192, 128, 0, 255);
+
+		triMeshCache.resize(static_cast<size_t>(ntris) * 3);
+		size_t vertexIndex = 0;
+		for (int i = 0; i < ntris * 3; i += 3)
+		{
+			const float* norm = &normals[i];
+			const unsigned char a = static_cast<unsigned char>(220 * (2 + norm[0] + norm[1]) / 4);
+			unsigned int color = duRGBA(a, a, a, 255);
+			if (norm[1] < walkableThr)
+			{
+				color = duLerpCol(color, unwalkable, 64);
+			}
+
+			const float* va = &verts[tris[i + 0] * 3];
+			const float* vb = &verts[tris[i + 1] * 3];
+			const float* vc = &verts[tris[i + 2] * 3];
+
+			int ax = 0;
+			if (rcAbs(norm[1]) > rcAbs(norm[ax]))
+			{
+				ax = 1;
+			}
+			if (rcAbs(norm[2]) > rcAbs(norm[ax]))
+			{
+				ax = 2;
+			}
+			ax = (1 << ax) & 3;
+			const int ay = (1 << ax) & 3;
+
+			auto emit = [&](const float* pos) {
+				CachedTriVertex& vertex = triMeshCache[vertexIndex++];
+				vertex.pos[0] = pos[0];
+				vertex.pos[1] = pos[1];
+				vertex.pos[2] = pos[2];
+				vertex.color = color;
+				vertex.uv[0] = pos[ax] * texScale;
+				vertex.uv[1] = pos[ay] * texScale;
+			};
+			emit(va);
+			emit(vb);
+			emit(vc);
+		}
+	}
+
+	texture(true);
+	glEnableClientState(GL_VERTEX_ARRAY);
+	glEnableClientState(GL_COLOR_ARRAY);
+	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+	const CachedTriVertex* vertices = triMeshCache.data();
+	glVertexPointer(3, GL_FLOAT, sizeof(CachedTriVertex), vertices->pos);
+	glColorPointer(4, GL_UNSIGNED_BYTE, sizeof(CachedTriVertex), &vertices->color);
+	glTexCoordPointer(2, GL_FLOAT, sizeof(CachedTriVertex), vertices->uv);
+	glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(triMeshCache.size()));
+	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+	glDisableClientState(GL_COLOR_ARRAY);
+	glDisableClientState(GL_VERTEX_ARRAY);
+	texture(false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

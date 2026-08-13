@@ -181,4 +181,5 @@ public:
 
 	void resetCommonSettings();
 	void drawCommonSettingsUI();
+	void drawInputMesh(float texScale);
 };

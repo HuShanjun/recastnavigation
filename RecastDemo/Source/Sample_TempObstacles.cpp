@@ -1083,16 +1083,7 @@ void Sample_TempObstacles::render()
 	// Draw mesh
 	if (drawMode != DRAWMODE_NAVMESH_TRANS)
 	{
-		// Draw mesh
-		duDebugDrawTriMeshSlope(
-			&debugDraw,
-			inputGeometry->mesh.verts.data(),
-			inputGeometry->mesh.getVertCount(),
-			inputGeometry->mesh.tris.data(),
-			inputGeometry->mesh.normals.data(),
-			inputGeometry->mesh.getTriCount(),
-			agentMaxSlope,
-			texScale);
+		drawInputMesh(texScale);
 		inputGeometry->drawOffMeshConnections(&debugDraw);
 	}
 
@@ -1129,7 +1120,10 @@ void Sample_TempObstacles::render()
 	{
 		if (drawMode != DRAWMODE_NAVMESH_INVIS)
 		{
+			glEnable(GL_POLYGON_OFFSET_FILL);
+			glPolygonOffset(-1.0f, -1.0f);
 			duDebugDrawNavMeshWithClosedList(&debugDraw, *navMesh, *navQuery, navMeshDrawFlags /*|DU_DRAWNAVMESH_COLOR_TILES*/);
+			glDisable(GL_POLYGON_OFFSET_FILL);
 		}
 		if (drawMode == DRAWMODE_NAVMESH_BVTREE)
 		{
