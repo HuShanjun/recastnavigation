@@ -4,6 +4,8 @@ target_sources(RecastBake PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/BakeConfig.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/BakeSupport.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/BakeCommon.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/BakeSolo.cpp
 	${CMAKE_SOURCE_DIR}/RecastDemo/Source/InputGeom.cpp
 	${CMAKE_SOURCE_DIR}/RecastDemo/Source/PartitionedMesh.cpp
 	${CMAKE_SOURCE_DIR}/RecastDemo/Source/PerfTimer.cpp

@@ -1,7 +1,9 @@
+#include "Bake.h"
 #include "BakeConfig.h"
 #include "InputGeom.h"
 #include "SampleInterfaces.h"
 
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -23,6 +25,20 @@ const char* findConfigPath(int argc, char** argv)
 		}
 	}
 	return nullptr;
+}
+
+const char* modeName(BakeMode mode)
+{
+	switch (mode)
+	{
+	case BakeMode::Solo:
+		return "solo";
+	case BakeMode::Tile:
+		return "tile";
+	case BakeMode::TempObstacles:
+		return "temp_obstacles";
+	}
+	return "unknown";
 }
 } // namespace
 
@@ -59,12 +75,35 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
+	const auto start = std::chrono::steady_clock::now();
+	int tileCount = 0;
+	bool ok = false;
+	switch (config.mode)
+	{
+	case BakeMode::Solo:
+		ok = bakeSolo(geom, config, ctx, outputPath, tileCount);
+		break;
+	case BakeMode::Tile:
+		ok = bakeTile(geom, config, ctx, outputPath, tileCount);
+		break;
+	case BakeMode::TempObstacles:
+		ok = bakeTempObstacles(geom, config, ctx, outputPath, tileCount);
+		break;
+	}
+
+	if (!ok)
+	{
+		ctx.dumpLog("Bake failed:");
+		return 1;
+	}
+
+	const auto elapsedMs =
+		std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
 	std::printf(
-		"Loaded '%s': verts=%d tris=%d (config mode ready, bake not yet wired)\n",
-		inputPath,
-		geom.mesh.getVertCount(),
-		geom.mesh.getTriCount());
-	std::printf("output=%s\n", outputPath);
-	(void)config;
+		"OK mode=%s tiles=%d elapsed_ms=%lld output=%s\n",
+		modeName(config.mode),
+		tileCount,
+		static_cast<long long>(elapsedMs),
+		outputPath);
 	return 0;
 }
