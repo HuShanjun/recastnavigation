@@ -11,6 +11,7 @@ add_library(RecastServerNav STATIC)
 target_sources(RecastServerNav PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/Source/ServerNav.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/Source/TileCacheSupport.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/Source/TileRebuilder.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/Source/RebuildQueue.cpp
 	${CMAKE_SOURCE_DIR}/RecastBake/BakeSupport.cpp
 	${CMAKE_SOURCE_DIR}/RecastDemo/Source/InputGeom.cpp
@@ -71,3 +72,24 @@ if(MSVC)
 endif()
 
 target_link_libraries(RecastServerNavSmoke PRIVATE RecastServerNav)
+
+add_executable(RecastServerNavRebuildSmoke EXCLUDE_FROM_ALL
+	${CMAKE_CURRENT_SOURCE_DIR}/smoke_rebuild_main.cpp
+)
+
+set_target_properties(RecastServerNavRebuildSmoke PROPERTIES
+	CXX_STANDARD 20
+	CXX_STANDARD_REQUIRED ON
+	CXX_EXTENSIONS OFF
+)
+
+target_include_directories(RecastServerNavRebuildSmoke PRIVATE
+	${CMAKE_SOURCE_DIR}/RecastBake/shim
+	${CMAKE_SOURCE_DIR}/RecastDemo/Include
+)
+
+if(MSVC)
+	target_compile_options(RecastServerNavRebuildSmoke PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/EHsc>)
+endif()
+
+target_link_libraries(RecastServerNavRebuildSmoke PRIVATE RecastServerNav)
