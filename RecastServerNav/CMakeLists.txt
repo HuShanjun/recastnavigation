@@ -1,3 +1,11 @@
+if(MSVC)
+	# Root CMake disables exceptions globally (/EHs-c-, _HAS_EXCEPTIONS=0).
+	# Restore /EHsc and _HAS_EXCEPTIONS for this directory (std::thread, STL).
+	string(REPLACE "/EHs-c-" "/EHsc" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+	add_compile_definitions(_HAS_EXCEPTIONS=1)
+endif()
+
 add_library(RecastServerNav STATIC)
 
 target_sources(RecastServerNav PRIVATE
@@ -20,7 +28,7 @@ set_target_properties(RecastServerNav PROPERTIES
 )
 
 if(MSVC)
-	target_compile_options(RecastServerNav PRIVATE /EHsc)
+	target_compile_options(RecastServerNav PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/EHsc>)
 	set_source_files_properties(
 		${CMAKE_SOURCE_DIR}/RecastDemo/Contrib/fastlz/fastlz.c
 		PROPERTIES COMPILE_OPTIONS "/WX-"
