@@ -45,6 +45,7 @@ target_sources(Tests PRIVATE
 	RecastBake/Tests_BakeConfig.cpp
 	../RecastBake/BakeConfig.cpp
 	RecastServerNav/Tests_RebuildQueue.cpp
+	RecastServerNav/Tests_PermanentBoxes.cpp
 )
 
 target_link_libraries(Tests PRIVATE Recast Detour DetourCrowd RecastServerNav)
