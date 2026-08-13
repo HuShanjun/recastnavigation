@@ -57,6 +57,9 @@ Docs/html
 ## CMake build cache
 build
 
+## Git worktrees
+.worktrees/
+
 ## IDE files
 .idea/
 cmake-build-*/
