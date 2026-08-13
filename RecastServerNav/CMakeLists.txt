@@ -46,3 +46,19 @@ target_link_libraries(RecastServerNav PUBLIC
 	RecastNavigation::DetourTileCache
 	RecastNavigation::Recast
 )
+
+add_executable(RecastServerNavSmoke EXCLUDE_FROM_ALL
+	${CMAKE_CURRENT_SOURCE_DIR}/smoke_load_main.cpp
+)
+
+set_target_properties(RecastServerNavSmoke PROPERTIES
+	CXX_STANDARD 20
+	CXX_STANDARD_REQUIRED ON
+	CXX_EXTENSIONS OFF
+)
+
+if(MSVC)
+	target_compile_options(RecastServerNavSmoke PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/EHsc>)
+endif()
+
+target_link_libraries(RecastServerNavSmoke PRIVATE RecastServerNav)

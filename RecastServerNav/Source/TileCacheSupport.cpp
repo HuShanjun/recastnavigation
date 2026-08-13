@@ -107,6 +107,7 @@ void destroyTileCacheRuntime(TileCacheRuntime& rt)
 	dtFreeNavMesh(rt.navMesh);
 	rt.tileCache = nullptr;
 	rt.navMesh = nullptr;
+	rt.allocator.reset();
 }
 
 bool loadTileCacheSetFile(TileCacheRuntime& rt, const char* path)
