@@ -27,6 +27,7 @@ target_include_directories(Tests PRIVATE
 	../RecastBake
 	../RecastBake/thirdparty
 	../RecastServerNav/Source
+	../RecastServerNav/Include
 )
 
 target_compile_definitions(Tests PRIVATE TOML_EXCEPTIONS=0)
@@ -44,9 +45,9 @@ target_sources(Tests PRIVATE
 	RecastBake/Tests_BakeConfig.cpp
 	../RecastBake/BakeConfig.cpp
 	RecastServerNav/Tests_RebuildQueue.cpp
-	../RecastServerNav/Source/RebuildQueue.cpp
+	RecastServerNav/Tests_PermanentBoxes.cpp
 )
 
-target_link_libraries(Tests PRIVATE Recast Detour DetourCrowd)
+target_link_libraries(Tests PRIVATE Recast Detour DetourCrowd RecastServerNav)
 
 add_test(NAME Tests COMMAND Tests)
