@@ -1,7 +1,6 @@
 #pragma once
 
 #include "BakeParams.h"
-#include "RecastServerNav.h"
 
 #include <vector>
 

@@ -1,7 +1,43 @@
 #include "RebuildQueue.h"
 
+#include "TileRebuilder.h"
+
+#include "Recast.h"
+#include "SampleInterfaces.h"
+
 #include <chrono>
+#include <cmath>
 #include <cstdio>
+
+namespace
+{
+bool aabbOverlap(const float* amin, const float* amax, const float* bmin, const float* bmax)
+{
+	return amin[0] <= bmax[0] && amax[0] >= bmin[0] && amin[1] <= bmax[1] && amax[1] >= bmin[1] &&
+		amin[2] <= bmax[2] && amax[2] >= bmin[2];
+}
+
+void tileWorldBounds(
+	const ServerBakeParams& bake,
+	const float* meshBmin,
+	const float* meshBmax,
+	int tx,
+	int ty,
+	float outMin[3],
+	float outMax[3])
+{
+	const float tcs = static_cast<float>(bake.tileSize) * bake.cellSize;
+	const int walkableRadius = static_cast<int>(std::ceil(bake.agentRadius / bake.cellSize));
+	const float borderWorld = static_cast<float>(walkableRadius + 3) * bake.cellSize;
+
+	outMin[0] = meshBmin[0] + static_cast<float>(tx) * tcs - borderWorld;
+	outMax[0] = meshBmin[0] + static_cast<float>(tx + 1) * tcs + borderWorld;
+	outMin[1] = meshBmin[1];
+	outMax[1] = meshBmax[1];
+	outMin[2] = meshBmin[2] + static_cast<float>(ty) * tcs - borderWorld;
+	outMax[2] = meshBmin[2] + static_cast<float>(ty + 1) * tcs + borderWorld;
+}
+} // namespace
 
 RebuildQueueLogic::RebuildQueueLogic(int maxQueue, int mergeWindowMs)
 	: m_maxQueue(maxQueue)
@@ -178,11 +214,31 @@ void RebuildQueue::stopWorker()
 	m_started = false;
 }
 
+void RebuildQueue::setJobContext(std::shared_ptr<const RebuildJobContext> ctx)
+{
+	std::lock_guard<std::mutex> lock(m_mutex);
+	m_jobContext = std::move(ctx);
+}
+
+bool RebuildQueue::hasActiveJobs() const
+{
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		if (!m_logic.empty() || m_inFlight > 0)
+		{
+			return true;
+		}
+	}
+	std::lock_guard<std::mutex> completedLock(m_completedMutex);
+	return !m_completed.empty();
+}
+
 void RebuildQueue::workerMain()
 {
 	for (;;)
 	{
 		std::pair<int, int> tile;
+		std::shared_ptr<const RebuildJobContext> ctx;
 		{
 			std::unique_lock<std::mutex> lock(m_mutex);
 			m_cv.wait(lock, [this]() {
@@ -196,24 +252,83 @@ void RebuildQueue::workerMain()
 			{
 				continue;
 			}
+			ctx = m_jobContext;
+			++m_inFlight;
 		}
+
+		CompletedTileRebuild result;
+		result.tx = tile.first;
+		result.ty = tile.second;
+		result.ok = false;
 
 		{
 			std::mutex& tileMutex = mutexForTile(tile.first, tile.second);
 			std::lock_guard<std::mutex> tileLock(tileMutex);
-			stubRebuild(tile.first, tile.second);
+			if (ctx && ctx->valid())
+			{
+				result = rebuildTile(tile.first, tile.second, *ctx);
+			}
+			else
+			{
+				std::printf("RebuildQueue: missing job context for tile (%d, %d)\n", tile.first, tile.second);
+			}
 		}
 
 		{
 			std::lock_guard<std::mutex> lock(m_completedMutex);
-			m_completed.push_back(tile);
+			m_completed.push_back(std::move(result));
+		}
+
+		{
+			std::lock_guard<std::mutex> lock(m_mutex);
+			--m_inFlight;
 		}
 	}
 }
 
-void RebuildQueue::stubRebuild(int tx, int ty)
+CompletedTileRebuild RebuildQueue::rebuildTile(int tx, int ty, const RebuildJobContext& ctx)
 {
-	std::printf("RebuildQueue stub rebuild tile (%d, %d)\n", tx, ty);
+	CompletedTileRebuild result;
+	result.tx = tx;
+	result.ty = ty;
+	result.ok = false;
+
+	float tbmin[3];
+	float tbmax[3];
+	tileWorldBounds(ctx.bake, ctx.meshBmin, ctx.meshBmax, tx, ty, tbmin, tbmax);
+
+	std::vector<PermanentBox> filtered;
+	filtered.reserve(ctx.boxes.size());
+	for (const PermanentBox& box : ctx.boxes)
+	{
+		if (aabbOverlap(box.bmin, box.bmax, tbmin, tbmax))
+		{
+			filtered.push_back(box);
+		}
+	}
+
+	TileRebuildInput in{};
+	in.verts = ctx.verts;
+	in.nverts = ctx.nverts;
+	in.partitioned = ctx.partitioned;
+	in.bake = &ctx.bake;
+	in.meshBmin = ctx.meshBmin;
+	in.meshBmax = ctx.meshBmax;
+	in.boxes = filtered.empty() ? nullptr : filtered.data();
+	in.boxCount = static_cast<int>(filtered.size());
+	in.tx = tx;
+	in.ty = ty;
+
+	BuildContext buildCtx;
+	TileRebuildOutput out;
+	if (!rebuildTileLayers(in, out, &buildCtx))
+	{
+		return result;
+	}
+
+	result.ok = out.ok;
+	result.layers = std::move(out.layers);
+	return result;
 }
 
 std::mutex& RebuildQueue::mutexForTile(int tx, int ty)
@@ -254,7 +369,7 @@ bool RebuildQueue::enqueueTiles(const std::vector<std::pair<int, int>>& tiles)
 	return ok;
 }
 
-void RebuildQueue::drainCompleted(std::vector<std::pair<int, int>>& out)
+void RebuildQueue::drainCompleted(std::vector<CompletedTileRebuild>& out)
 {
 	out.clear();
 	std::lock_guard<std::mutex> lock(m_completedMutex);

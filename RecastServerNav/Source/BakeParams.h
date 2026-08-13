@@ -36,3 +36,10 @@ inline ServerBakeParams ServerBakeParams::defaults()
 {
 	return ServerBakeParams{};
 }
+
+struct PermanentBox
+{
+	float bmin[3];
+	float bmax[3];
+	unsigned int id;
+};

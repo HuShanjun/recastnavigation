@@ -93,3 +93,19 @@ if(MSVC)
 endif()
 
 target_link_libraries(RecastServerNavRebuildSmoke PRIVATE RecastServerNav)
+
+add_executable(RecastServerNavPermanentSmoke EXCLUDE_FROM_ALL
+	${CMAKE_CURRENT_SOURCE_DIR}/smoke_permanent_main.cpp
+)
+
+set_target_properties(RecastServerNavPermanentSmoke PROPERTIES
+	CXX_STANDARD 20
+	CXX_STANDARD_REQUIRED ON
+	CXX_EXTENSIONS OFF
+)
+
+if(MSVC)
+	target_compile_options(RecastServerNavPermanentSmoke PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/EHsc>)
+endif()
+
+target_link_libraries(RecastServerNavPermanentSmoke PRIVATE RecastServerNav)

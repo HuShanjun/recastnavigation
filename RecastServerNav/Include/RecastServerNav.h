@@ -12,13 +12,6 @@ struct PathResult
 	bool partial = false;
 };
 
-struct PermanentBox
-{
-	float bmin[3];
-	float bmax[3];
-	unsigned int id;
-};
-
 class ServerNav
 {
 public:

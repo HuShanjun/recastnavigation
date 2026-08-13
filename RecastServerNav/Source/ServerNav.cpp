@@ -2,6 +2,7 @@
 #include "RebuildQueue.h"
 #include "TileCacheSupport.h"
 
+#include "DetourAlloc.h"
 #include "DetourNavMeshQuery.h"
 #include "DetourStatus.h"
 #include "InputGeom.h"
@@ -19,6 +20,7 @@ namespace
 constexpr int QUERY_NODE_COUNT = 2048;
 constexpr int MAX_POLYS = 256;
 constexpr int MAX_STRAIGHT_PATH = 256;
+constexpr int MAX_TILE_LAYERS = 32;
 
 void collectTilesForBounds(
 	const dtNavMeshParams* params,
@@ -67,7 +69,80 @@ void collectTilesForBounds(
 		}
 	}
 }
+
+void removeCompressedTilesAt(dtTileCache* tileCache, dtNavMesh* navMesh, int tx, int ty)
+{
+	if (!tileCache || !navMesh)
+	{
+		return;
+	}
+
+	dtCompressedTileRef tiles[MAX_TILE_LAYERS];
+	const int ntiles = tileCache->getTilesAt(tx, ty, tiles, MAX_TILE_LAYERS);
+	for (int i = 0; i < ntiles; ++i)
+	{
+		const dtCompressedTile* tile = tileCache->getTileByRef(tiles[i]);
+		if (tile && tile->header)
+		{
+			navMesh->removeTile(navMesh->getTileRefAt(tx, ty, tile->header->tlayer), nullptr, nullptr);
+		}
+		tileCache->removeTile(tiles[i], nullptr, nullptr);
+	}
 }
+
+bool applyRebuiltLayers(
+	dtTileCache* tileCache,
+	dtNavMesh* navMesh,
+	int tx,
+	int ty,
+	const std::vector<std::vector<unsigned char>>& layers)
+{
+	if (!tileCache || !navMesh)
+	{
+		return false;
+	}
+
+	removeCompressedTilesAt(tileCache, navMesh, tx, ty);
+
+	bool allOk = true;
+	for (const std::vector<unsigned char>& layer : layers)
+	{
+		if (layer.empty())
+		{
+			allOk = false;
+			continue;
+		}
+
+		unsigned char* data = static_cast<unsigned char*>(dtAlloc(layer.size(), DT_ALLOC_PERM));
+		if (!data)
+		{
+			allOk = false;
+			continue;
+		}
+		std::memcpy(data, layer.data(), layer.size());
+
+		dtCompressedTileRef tileRef = 0;
+		const dtStatus addStatus =
+			tileCache->addTile(data, static_cast<int>(layer.size()), DT_COMPRESSEDTILE_FREE_DATA, &tileRef);
+		if (dtStatusFailed(addStatus))
+		{
+			dtFree(data);
+			allOk = false;
+			continue;
+		}
+		if (tileRef)
+		{
+			const dtStatus buildStatus = tileCache->buildNavMeshTile(tileRef, navMesh);
+			if (dtStatusFailed(buildStatus))
+			{
+				allOk = false;
+			}
+		}
+	}
+	return allOk;
+}
+
+} // namespace
 
 struct ServerNav::Impl
 {
@@ -105,6 +180,32 @@ struct ServerNav::Impl
 		return baseGeom && !baseGeom->mesh.verts.empty() && !baseGeom->mesh.tris.empty();
 	}
 };
+
+// Helper needs Impl complete — redefine makeJobContext without forward-dep on Impl.
+namespace
+{
+std::shared_ptr<const RebuildJobContext> snapshotJobContext(
+	InputGeom& geom,
+	const ServerBakeParams& bake,
+	const std::vector<PermanentBox>& boxes)
+{
+	auto ctx = std::make_shared<RebuildJobContext>();
+	ctx->bake = bake;
+	ctx->boxes = boxes;
+	ctx->verts = geom.mesh.verts.data();
+	ctx->nverts = geom.mesh.getVertCount();
+	ctx->partitioned = &geom.partitionedMesh;
+	const float* bmin = geom.getNavMeshBoundsMin();
+	const float* bmax = geom.getNavMeshBoundsMax();
+	ctx->meshBmin[0] = bmin[0];
+	ctx->meshBmin[1] = bmin[1];
+	ctx->meshBmin[2] = bmin[2];
+	ctx->meshBmax[0] = bmax[0];
+	ctx->meshBmax[1] = bmax[1];
+	ctx->meshBmax[2] = bmax[2];
+	return ctx;
+}
+} // namespace
 
 ServerNav::ServerNav()
 	: m(new Impl())
@@ -153,6 +254,11 @@ bool ServerNav::loadBaseMeshObj(const char* path)
 {
 	if (!m || !path)
 	{
+		return false;
+	}
+	if (m->rebuildQueue && m->rebuildQueue->hasActiveJobs())
+	{
+		std::printf("ERROR: loadBaseMeshObj rejected while rebuild jobs are active\n");
 		return false;
 	}
 
@@ -211,14 +317,23 @@ void ServerNav::tick(float dt)
 		}
 	}
 
-	std::vector<std::pair<int, int>> completed;
+	std::vector<CompletedTileRebuild> completed;
 	m->rebuildQueue->drainCompleted(completed);
-	if (m->rebuildCompletedCb)
+	for (const CompletedTileRebuild& item : completed)
 	{
-		for (const auto& tile : completed)
+		bool ok = item.ok;
+		if (ok && !item.layers.empty() && m->runtime.tileCache && m->runtime.navMesh)
 		{
-			// Stub rebuild always "succeeds"; real ok flag arrives in Task 3.
-			m->rebuildCompletedCb(tile.first, tile.second, true, m->rebuildCompletedUser);
+			// ok && empty layers: keep existing tile (safer when geometry missing for this tile).
+			if (!applyRebuiltLayers(m->runtime.tileCache, m->runtime.navMesh, item.tx, item.ty, item.layers))
+			{
+				ok = false;
+			}
+		}
+
+		if (m->rebuildCompletedCb)
+		{
+			m->rebuildCompletedCb(item.tx, item.ty, ok, m->rebuildCompletedUser);
 		}
 	}
 }
@@ -320,7 +435,8 @@ bool ServerNav::commitPermanentBounds(const float* bmin, const float* bmax)
 	{
 		return false;
 	}
-	// Task 1: still stub enqueue until TileRebuilder lands in Task 3.
+
+	m->rebuildQueue->setJobContext(snapshotJobContext(*m->baseGeom, m->bakeParams, m->permanentBoxes));
 	return m->rebuildQueue->enqueueTiles(tiles);
 }
 
@@ -380,24 +496,8 @@ bool ServerNav::findPath(const float* start, const float* end, PathResult& out)
 
 bool ServerNav::requestRebuildBounds(const float bmin[3], const float bmax[3])
 {
-	if (!m || !m->runtime.navMesh || !bmin || !bmax)
-	{
-		return false;
-	}
-
-	const dtNavMeshParams* params = m->runtime.navMesh->getParams();
-	if (!params)
-	{
-		return false;
-	}
-
-	std::vector<std::pair<int, int>> tiles;
-	collectTilesForBounds(params, bmin, bmax, tiles);
-	if (tiles.empty())
-	{
-		return false;
-	}
-	return m->rebuildQueue->enqueueTiles(tiles);
+	// Alias permanent commit when a base mesh is loaded; otherwise refuse (no job context).
+	return commitPermanentBounds(bmin, bmax);
 }
 
 void ServerNav::setRebuildCompletedCallback(void (*cb)(int tx, int ty, bool ok, void* user), void* user)
