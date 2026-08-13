@@ -93,6 +93,7 @@ add_subdirectory(DetourCrowd)
 add_subdirectory(DetourTileCache)
 add_subdirectory(Recast)
 add_subdirectory(RecastBake)
+add_subdirectory(RecastServerNav)
 
 configure_package_config_file(
     ${PROJECT_SOURCE_DIR}/recastnavigation-config.cmake.in
