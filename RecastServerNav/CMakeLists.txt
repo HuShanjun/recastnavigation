@@ -12,14 +12,21 @@ target_sources(RecastServerNav PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/Source/ServerNav.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/Source/TileCacheSupport.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/Source/RebuildQueue.cpp
+	${CMAKE_SOURCE_DIR}/RecastBake/BakeSupport.cpp
+	${CMAKE_SOURCE_DIR}/RecastDemo/Source/InputGeom.cpp
+	${CMAKE_SOURCE_DIR}/RecastDemo/Source/PartitionedMesh.cpp
+	${CMAKE_SOURCE_DIR}/RecastDemo/Source/PerfTimer.cpp
 	${CMAKE_SOURCE_DIR}/RecastDemo/Contrib/fastlz/fastlz.c
 )
 
 target_include_directories(RecastServerNav PUBLIC
 	${CMAKE_CURRENT_SOURCE_DIR}/Include
+	${CMAKE_CURRENT_SOURCE_DIR}/Source
 )
 
 target_include_directories(RecastServerNav PRIVATE
+	${CMAKE_SOURCE_DIR}/RecastBake/shim
+	${CMAKE_SOURCE_DIR}/RecastDemo/Include
 	${CMAKE_SOURCE_DIR}/RecastDemo/Contrib/fastlz
 )
 
@@ -46,6 +53,7 @@ target_link_libraries(RecastServerNav PUBLIC
 	RecastNavigation::Detour
 	RecastNavigation::DetourTileCache
 	RecastNavigation::Recast
+	RecastNavigation::DebugUtils
 )
 
 add_executable(RecastServerNavSmoke EXCLUDE_FROM_ALL

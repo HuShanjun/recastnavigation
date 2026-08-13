@@ -4,9 +4,12 @@
 
 #include "DetourNavMeshQuery.h"
 #include "DetourStatus.h"
+#include "InputGeom.h"
+#include "SampleInterfaces.h"
 
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -71,8 +74,13 @@ struct ServerNav::Impl
 	TileCacheRuntime runtime;
 	dtNavMeshQuery* query = nullptr;
 	std::unique_ptr<RebuildQueue> rebuildQueue;
-	void (*rebuildCompletedCb)(int tx, int ty, void* user) = nullptr;
+	void (*rebuildCompletedCb)(int tx, int ty, bool ok, void* user) = nullptr;
 	void* rebuildCompletedUser = nullptr;
+
+	std::unique_ptr<InputGeom> baseGeom;
+	ServerBakeParams bakeParams = ServerBakeParams::defaults();
+	std::vector<PermanentBox> permanentBoxes;
+	unsigned int nextPermanentBoxId = 1;
 
 	void clearQuery()
 	{
@@ -80,10 +88,21 @@ struct ServerNav::Impl
 		query = nullptr;
 	}
 
+	void clearBaseMesh()
+	{
+		baseGeom.reset();
+	}
+
 	void clear()
 	{
 		clearQuery();
+		clearBaseMesh();
 		destroyTileCacheRuntime(runtime);
+	}
+
+	bool hasBaseMesh() const
+	{
+		return baseGeom && !baseGeom->mesh.verts.empty() && !baseGeom->mesh.tris.empty();
 	}
 };
 
@@ -130,6 +149,44 @@ bool ServerNav::loadTileCacheSet(const char* path)
 	return true;
 }
 
+bool ServerNav::loadBaseMeshObj(const char* path)
+{
+	if (!m || !path)
+	{
+		return false;
+	}
+
+	auto geom = std::make_unique<InputGeom>();
+	BuildContext ctx;
+	if (!geom->load(&ctx, path))
+	{
+		std::printf("ERROR: loadBaseMeshObj('%s') failed\n", path);
+		return false;
+	}
+	if (geom->mesh.verts.empty() || geom->mesh.tris.empty())
+	{
+		std::printf("ERROR: loadBaseMeshObj('%s') produced empty mesh\n", path);
+		return false;
+	}
+
+	m->baseGeom = std::move(geom);
+	return true;
+}
+
+bool ServerNav::setBakeConfig(const ServerBakeParams& params)
+{
+	if (!m)
+	{
+		return false;
+	}
+	if (params.cellSize <= 0.0f || params.cellHeight <= 0.0f || params.tileSize <= 0)
+	{
+		return false;
+	}
+	m->bakeParams = params;
+	return true;
+}
+
 void ServerNav::tick(float dt)
 {
 	if (!m)
@@ -160,7 +217,8 @@ void ServerNav::tick(float dt)
 	{
 		for (const auto& tile : completed)
 		{
-			m->rebuildCompletedCb(tile.first, tile.second, m->rebuildCompletedUser);
+			// Stub rebuild always "succeeds"; real ok flag arrives in Task 3.
+			m->rebuildCompletedCb(tile.first, tile.second, true, m->rebuildCompletedUser);
 		}
 	}
 }
@@ -196,6 +254,74 @@ bool ServerNav::removeObstacle(dtObstacleRef ref)
 		return false;
 	}
 	return dtStatusSucceed(m->runtime.tileCache->removeObstacle(ref));
+}
+
+unsigned int ServerNav::addPermanentBox(const float* bmin, const float* bmax)
+{
+	if (!m || !bmin || !bmax)
+	{
+		return 0;
+	}
+	if (m->nextPermanentBoxId == 0)
+	{
+		// Wrapped; treat as failure rather than reuse 0 (0 is reserved for failure).
+		return 0;
+	}
+
+	PermanentBox box{};
+	std::memcpy(box.bmin, bmin, sizeof(box.bmin));
+	std::memcpy(box.bmax, bmax, sizeof(box.bmax));
+	box.id = m->nextPermanentBoxId++;
+	m->permanentBoxes.push_back(box);
+	return box.id;
+}
+
+bool ServerNav::removePermanentBox(unsigned int id)
+{
+	if (!m || id == 0)
+	{
+		return false;
+	}
+	for (auto it = m->permanentBoxes.begin(); it != m->permanentBoxes.end(); ++it)
+	{
+		if (it->id == id)
+		{
+			m->permanentBoxes.erase(it);
+			return true;
+		}
+	}
+	return false;
+}
+
+bool ServerNav::commitPermanentBounds(const float* bmin, const float* bmax)
+{
+	if (!m || !bmin || !bmax)
+	{
+		return false;
+	}
+	if (!m->hasBaseMesh())
+	{
+		return false;
+	}
+	if (!m->runtime.navMesh)
+	{
+		return false;
+	}
+
+	const dtNavMeshParams* params = m->runtime.navMesh->getParams();
+	if (!params)
+	{
+		return false;
+	}
+
+	std::vector<std::pair<int, int>> tiles;
+	collectTilesForBounds(params, bmin, bmax, tiles);
+	if (tiles.empty())
+	{
+		return false;
+	}
+	// Task 1: still stub enqueue until TileRebuilder lands in Task 3.
+	return m->rebuildQueue->enqueueTiles(tiles);
 }
 
 bool ServerNav::findPath(const float* start, const float* end, PathResult& out)
@@ -274,7 +400,7 @@ bool ServerNav::requestRebuildBounds(const float bmin[3], const float bmax[3])
 	return m->rebuildQueue->enqueueTiles(tiles);
 }
 
-void ServerNav::setRebuildCompletedCallback(void (*cb)(int tx, int ty, void* user), void* user)
+void ServerNav::setRebuildCompletedCallback(void (*cb)(int tx, int ty, bool ok, void* user), void* user)
 {
 	if (!m)
 	{

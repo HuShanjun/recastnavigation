@@ -51,11 +51,11 @@ void tickMany(ServerNav& nav, int count)
 		nav.tick(kTickDt);
 }
 
-void onRebuildCompleted(int tx, int ty, void* user)
+void onRebuildCompleted(int tx, int ty, bool ok, void* user)
 {
 	int* count = static_cast<int*>(user);
 	++(*count);
-	std::printf("rebuild completed: tx=%d ty=%d (total=%d)\n", tx, ty, *count);
+	std::printf("rebuild completed: tx=%d ty=%d ok=%d (total=%d)\n", tx, ty, ok ? 1 : 0, *count);
 }
 
 bool parseCoord(const char* s, float& out)
