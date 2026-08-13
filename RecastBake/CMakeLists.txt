@@ -2,6 +2,7 @@ add_executable(RecastBake)
 
 target_sources(RecastBake PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/BakeConfig.cpp
 )
 
 target_include_directories(RecastBake PRIVATE

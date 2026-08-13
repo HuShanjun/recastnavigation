@@ -16,7 +16,11 @@ endif()
 target_include_directories(Tests PRIVATE
 	./Contrib
 	../RecastDemo/Include
+	../RecastBake
+	../RecastBake/thirdparty
 )
+
+target_compile_definitions(Tests PRIVATE TOML_EXCEPTIONS=0)
 
 target_sources(Tests PRIVATE 
 	Contrib/catch2/catch_amalgamated.cpp
@@ -28,6 +32,8 @@ target_sources(Tests PRIVATE
 	Recast/Tests_RecastRasterization.cpp
 	RecastDemo/Tests_PartitionedMesh.cpp
 	../RecastDemo/Source/PartitionedMesh.cpp
+	RecastBake/Tests_BakeConfig.cpp
+	../RecastBake/BakeConfig.cpp
 )
 
 target_link_libraries(Tests PRIVATE Recast Detour DetourCrowd)
