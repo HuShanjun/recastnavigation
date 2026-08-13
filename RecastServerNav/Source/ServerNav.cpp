@@ -139,10 +139,18 @@ void ServerNav::tick(float dt)
 
 	if (m->runtime.tileCache && m->runtime.navMesh)
 	{
-		const dtStatus status = m->runtime.tileCache->update(dt, m->runtime.navMesh);
-		if (dtStatusFailed(status))
+		// Settle TileCache obstacle/rebuild work within this tick (same spirit as RecastDynamicObstacle).
+		constexpr int kMaxTileCacheUpdates = 64;
+		bool upToDate = false;
+		for (int i = 0; i < kMaxTileCacheUpdates && !upToDate; ++i)
 		{
-			std::printf("ERROR: tileCache->update failed (status=0x%x)\n", status);
+			const float stepDt = (i == 0) ? dt : 0.0f;
+			const dtStatus status = m->runtime.tileCache->update(stepDt, m->runtime.navMesh, &upToDate);
+			if (dtStatusFailed(status))
+			{
+				std::printf("ERROR: tileCache->update failed (status=0x%x)\n", status);
+				break;
+			}
 		}
 	}
 
