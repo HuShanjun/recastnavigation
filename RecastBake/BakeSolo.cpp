@@ -234,17 +234,3 @@ bool bakeSolo(InputGeom& geom, const BakeConfig& cfg, BuildContext& ctx, const c
 	dtFreeNavMesh(navMesh);
 	return true;
 }
-
-bool bakeTile(InputGeom& /*geom*/, const BakeConfig& /*cfg*/, BuildContext& ctx, const char* /*outPath*/, int& outTileCount)
-{
-	outTileCount = 0;
-	ctx.log(RC_LOG_ERROR, "bakeTile: not implemented yet");
-	return false;
-}
-
-bool bakeTempObstacles(InputGeom& /*geom*/, const BakeConfig& /*cfg*/, BuildContext& ctx, const char* /*outPath*/, int& outTileCount)
-{
-	outTileCount = 0;
-	ctx.log(RC_LOG_ERROR, "bakeTempObstacles: not implemented yet");
-	return false;
-}
