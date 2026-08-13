@@ -35,12 +35,10 @@ target_include_directories(Contrib PUBLIC
 )
 
 # SDL2 includes needed for imgui_impl_sdl2.cpp
-if(WIN32)
-	target_include_directories(Contrib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/SDL/include)
-elseif(APPLE)
+if(APPLE)
 	# SDL2_INCLUDE_DIR and SDL2_INCLUDE_DIR_PARENT are set by the parent CMakeLists.txt
 	target_include_directories(Contrib PRIVATE ${SDL2_INCLUDE_DIR} ${SDL2_INCLUDE_DIR_PARENT})
 else()
-	# On Linux, link against SDL2 to get the include directories from the imported target
+	# Win/Linux: use the imported target from find_package(SDL2) (respects SDL2_ROOT_DIR)
 	target_link_libraries(Contrib PRIVATE SDL2::SDL2)
 endif()
