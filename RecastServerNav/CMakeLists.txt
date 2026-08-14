@@ -98,3 +98,19 @@ if(MSVC)
 endif()
 
 target_link_libraries(RecastServerNavPermanentSmoke PRIVATE RecastServerNav)
+
+add_executable(RecastServerNavMeshUgcSmoke EXCLUDE_FROM_ALL
+	${CMAKE_CURRENT_SOURCE_DIR}/smoke_mesh_ugc_main.cpp
+)
+
+set_target_properties(RecastServerNavMeshUgcSmoke PROPERTIES
+	CXX_STANDARD 20
+	CXX_STANDARD_REQUIRED ON
+	CXX_EXTENSIONS OFF
+)
+
+if(MSVC)
+	target_compile_options(RecastServerNavMeshUgcSmoke PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/EHsc>)
+endif()
+
+target_link_libraries(RecastServerNavMeshUgcSmoke PRIVATE RecastServerNav)

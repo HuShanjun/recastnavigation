@@ -2,6 +2,8 @@
 
 #include "RecastBakeCore/BakeCoreParams.h"
 
+#include <vector>
+
 /// Bake parameters for permanent TileCache rebuild (must match original TSET bake).
 struct ServerBakeParams : public BakeCoreParams
 {
@@ -23,4 +25,13 @@ struct PermanentBox
 	float bmin[3];
 	float bmax[3];
 	unsigned int id;
+};
+
+struct PermanentMeshObject
+{
+	unsigned int id = 0;
+	std::vector<float> verts;
+	std::vector<int> tris;
+	float bmin[3];
+	float bmax[3];
 };

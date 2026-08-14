@@ -47,6 +47,7 @@ target_sources(Tests PRIVATE
 	../RecastBake/BakeConfig.cpp
 	RecastServerNav/Tests_RebuildQueue.cpp
 	RecastServerNav/Tests_PermanentBoxes.cpp
+	RecastServerNav/Tests_PermanentMeshObjects.cpp
 	RecastBakeCore/Tests_TileRasterizer.cpp
 	RecastBakeCore/Tests_TileCacheSetIO.cpp
 )

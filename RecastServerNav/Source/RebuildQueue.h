@@ -26,6 +26,7 @@ struct RebuildJobContext
 {
 	ServerBakeParams bake;
 	std::vector<PermanentBox> boxes;
+	std::vector<PermanentMeshObject> meshObjects;
 	const float* verts = nullptr;
 	int nverts = 0;
 	const PartitionedMesh* partitioned = nullptr;

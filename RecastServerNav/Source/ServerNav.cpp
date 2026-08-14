@@ -8,6 +8,8 @@
 #include "InputGeom.h"
 #include "SampleInterfaces.h"
 
+#include <algorithm>
+#include <cfloat>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -156,6 +158,8 @@ struct ServerNav::Impl
 	ServerBakeParams bakeParams = ServerBakeParams::defaults();
 	std::vector<PermanentBox> permanentBoxes;
 	unsigned int nextPermanentBoxId = 1;
+	std::vector<PermanentMeshObject> permanentMeshObjects;
+	unsigned int nextPermanentMeshId = 1;
 
 	void clearQuery()
 	{
@@ -187,11 +191,13 @@ namespace
 std::shared_ptr<const RebuildJobContext> snapshotJobContext(
 	InputGeom& geom,
 	const ServerBakeParams& bake,
-	const std::vector<PermanentBox>& boxes)
+	const std::vector<PermanentBox>& boxes,
+	const std::vector<PermanentMeshObject>& meshObjects)
 {
 	auto ctx = std::make_shared<RebuildJobContext>();
 	ctx->bake = bake;
 	ctx->boxes = boxes;
+	ctx->meshObjects = meshObjects;
 	ctx->verts = geom.mesh.verts.data();
 	ctx->nverts = geom.mesh.getVertCount();
 	ctx->partitioned = &geom.partitionedMesh;
@@ -408,6 +414,66 @@ bool ServerNav::removePermanentBox(unsigned int id)
 	return false;
 }
 
+unsigned int ServerNav::addPermanentMeshObject(
+	const float* verts, const int nverts,
+	const int* tris, const int ntris,
+	float outBmin[3], float outBmax[3])
+{
+	if (!m || !verts || nverts <= 0 || !tris || ntris <= 0 || !outBmin || !outBmax)
+	{
+		return 0;
+	}
+	for (int i = 0; i < ntris * 3; ++i)
+	{
+		if (tris[i] < 0 || tris[i] >= nverts)
+		{
+			return 0;
+		}
+	}
+	if (m->nextPermanentMeshId == 0)
+	{
+		return 0;
+	}
+
+	PermanentMeshObject obj{};
+	obj.verts.assign(verts, verts + static_cast<size_t>(nverts) * 3);
+	obj.tris.assign(tris, tris + static_cast<size_t>(ntris) * 3);
+	obj.bmin[0] = obj.bmin[1] = obj.bmin[2] = FLT_MAX;
+	obj.bmax[0] = obj.bmax[1] = obj.bmax[2] = -FLT_MAX;
+	for (int i = 0; i < nverts; ++i)
+	{
+		for (int axis = 0; axis < 3; ++axis)
+		{
+			const float v = verts[static_cast<size_t>(i) * 3 + axis];
+			obj.bmin[axis] = std::min(obj.bmin[axis], v);
+			obj.bmax[axis] = std::max(obj.bmax[axis], v);
+		}
+	}
+	obj.id = m->nextPermanentMeshId++;
+
+	std::memcpy(outBmin, obj.bmin, sizeof(obj.bmin));
+	std::memcpy(outBmax, obj.bmax, sizeof(obj.bmax));
+	m->permanentMeshObjects.push_back(std::move(obj));
+	return m->permanentMeshObjects.back().id;
+}
+
+bool ServerNav::removePermanentMeshObject(unsigned int id)
+{
+	if (!m || id == 0)
+	{
+		return false;
+	}
+	for (auto it = m->permanentMeshObjects.begin(); it != m->permanentMeshObjects.end(); ++it)
+	{
+		if (it->id == id)
+		{
+			m->permanentMeshObjects.erase(it);
+			return true;
+		}
+	}
+	return false;
+}
+
 bool ServerNav::commitPermanentBounds(const float* bmin, const float* bmax)
 {
 	if (!m || !bmin || !bmax)
@@ -436,7 +502,8 @@ bool ServerNav::commitPermanentBounds(const float* bmin, const float* bmax)
 		return false;
 	}
 
-	m->rebuildQueue->setJobContext(snapshotJobContext(*m->baseGeom, m->bakeParams, m->permanentBoxes));
+	m->rebuildQueue->setJobContext(
+		snapshotJobContext(*m->baseGeom, m->bakeParams, m->permanentBoxes, m->permanentMeshObjects));
 	return m->rebuildQueue->enqueueTiles(tiles);
 }
 

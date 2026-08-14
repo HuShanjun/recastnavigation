@@ -20,6 +20,14 @@ rcHeightfield* rasterizeTileHeightfield(
 	const BakeCoreParams& params,
 	bool* outEmpty);
 
+bool rasterizeExtraTriangles(
+	rcContext* ctx,
+	const rcConfig& tileCfg,
+	const float* verts, int nverts,
+	const int* tris, int ntris,
+	const BakeCoreParams& params,
+	rcHeightfield& solid);
+
 struct CompressedTileLayer
 {
 	unsigned char* data = nullptr;
