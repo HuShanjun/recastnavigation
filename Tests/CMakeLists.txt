@@ -26,6 +26,7 @@ target_include_directories(Tests PRIVATE
 	../RecastDemo/Include
 	../RecastBake
 	../RecastBake/thirdparty
+	../RecastBakeCore/Include
 	../RecastServerNav/Source
 	../RecastServerNav/Include
 )
@@ -46,8 +47,10 @@ target_sources(Tests PRIVATE
 	../RecastBake/BakeConfig.cpp
 	RecastServerNav/Tests_RebuildQueue.cpp
 	RecastServerNav/Tests_PermanentBoxes.cpp
+	RecastBakeCore/Tests_TileRasterizer.cpp
+	RecastBakeCore/Tests_TileCacheSetIO.cpp
 )
 
-target_link_libraries(Tests PRIVATE Recast Detour DetourCrowd RecastServerNav)
+target_link_libraries(Tests PRIVATE Recast Detour DetourCrowd RecastServerNav RecastBakeCore)
 
 add_test(NAME Tests COMMAND Tests)

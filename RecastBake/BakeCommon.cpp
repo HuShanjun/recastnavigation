@@ -1,27 +1,13 @@
 #include "BakeCommon.h"
 
+#include "RecastBakeCore/TileRasterizer.h"
+
 #include <cstdio>
 #include <cstring>
 
 void fillRcConfigFromBakeConfig(const BakeConfig& cfg, const float* bmin, const float* bmax, rcConfig& out)
 {
-	std::memset(&out, 0, sizeof(out));
-	out.cs = cfg.cellSize;
-	out.ch = cfg.cellHeight;
-	out.walkableSlopeAngle = cfg.agentMaxSlope;
-	out.walkableHeight = static_cast<int>(ceilf(cfg.agentHeight / out.ch));
-	out.walkableClimb = static_cast<int>(floorf(cfg.agentMaxClimb / out.ch));
-	out.walkableRadius = static_cast<int>(ceilf(cfg.agentRadius / out.cs));
-	out.maxEdgeLen = static_cast<int>(cfg.edgeMaxLen / cfg.cellSize);
-	out.maxSimplificationError = cfg.edgeMaxError;
-	out.minRegionArea = static_cast<int>(rcSqr(cfg.regionMinSize));
-	out.mergeRegionArea = static_cast<int>(rcSqr(cfg.regionMergeSize));
-	out.maxVertsPerPoly = cfg.vertsPerPoly;
-	out.detailSampleDist = cfg.detailSampleDist < 0.9f ? 0 : cfg.cellSize * cfg.detailSampleDist;
-	out.detailSampleMaxError = cfg.cellHeight * cfg.detailSampleMaxError;
-	rcVcopy(out.bmin, bmin);
-	rcVcopy(out.bmax, bmax);
-	rcCalcGridSize(out.bmin, out.bmax, out.cs, &out.width, &out.height);
+	fillRcConfigSolo(cfg, bmin, bmax, out);
 }
 
 void applyPolyAreasAndFlags(rcPolyMesh& polyMesh)
