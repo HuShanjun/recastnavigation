@@ -316,6 +316,8 @@ CompletedTileRebuild RebuildQueue::rebuildTile(int tx, int ty, const RebuildJobC
 	in.meshBmax = ctx.meshBmax;
 	in.boxes = filtered.empty() ? nullptr : filtered.data();
 	in.boxCount = static_cast<int>(filtered.size());
+	in.meshObjects = ctx.meshObjects.empty() ? nullptr : ctx.meshObjects.data();
+	in.meshObjectCount = static_cast<int>(ctx.meshObjects.size());
 	in.tx = tx;
 	in.ty = ty;
 

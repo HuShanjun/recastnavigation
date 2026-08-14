@@ -191,11 +191,13 @@ namespace
 std::shared_ptr<const RebuildJobContext> snapshotJobContext(
 	InputGeom& geom,
 	const ServerBakeParams& bake,
-	const std::vector<PermanentBox>& boxes)
+	const std::vector<PermanentBox>& boxes,
+	const std::vector<PermanentMeshObject>& meshObjects)
 {
 	auto ctx = std::make_shared<RebuildJobContext>();
 	ctx->bake = bake;
 	ctx->boxes = boxes;
+	ctx->meshObjects = meshObjects;
 	ctx->verts = geom.mesh.verts.data();
 	ctx->nverts = geom.mesh.getVertCount();
 	ctx->partitioned = &geom.partitionedMesh;
@@ -500,7 +502,8 @@ bool ServerNav::commitPermanentBounds(const float* bmin, const float* bmax)
 		return false;
 	}
 
-	m->rebuildQueue->setJobContext(snapshotJobContext(*m->baseGeom, m->bakeParams, m->permanentBoxes));
+	m->rebuildQueue->setJobContext(
+		snapshotJobContext(*m->baseGeom, m->bakeParams, m->permanentBoxes, m->permanentMeshObjects));
 	return m->rebuildQueue->enqueueTiles(tiles);
 }
 

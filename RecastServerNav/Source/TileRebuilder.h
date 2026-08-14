@@ -17,6 +17,8 @@ struct TileRebuildInput
 	const float* meshBmax = nullptr;
 	const PermanentBox* boxes = nullptr;
 	int boxCount = 0;
+	const PermanentMeshObject* meshObjects = nullptr;
+	int meshObjectCount = 0;
 	int tx = 0;
 	int ty = 0;
 };
