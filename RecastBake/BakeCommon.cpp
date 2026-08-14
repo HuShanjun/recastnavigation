@@ -4,6 +4,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <cmath>
 
 void fillRcConfigFromBakeConfig(const BakeConfig& cfg, const float* bmin, const float* bmax, rcConfig& out)
 {
