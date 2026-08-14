@@ -15,7 +15,6 @@ target_sources(RecastServerNav PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/Source/RebuildQueue.cpp
 	${CMAKE_SOURCE_DIR}/RecastBake/BakeSupport.cpp
 	${CMAKE_SOURCE_DIR}/RecastDemo/Source/InputGeom.cpp
-	${CMAKE_SOURCE_DIR}/RecastDemo/Source/PartitionedMesh.cpp
 	${CMAKE_SOURCE_DIR}/RecastDemo/Source/PerfTimer.cpp
 )
 

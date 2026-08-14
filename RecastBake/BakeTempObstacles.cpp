@@ -4,6 +4,7 @@
 #include "SampleInterfaces.h"
 
 #include "RecastBakeCore/TileCacheCompression.h"
+#include "RecastBakeCore/TileRasterizer.h"
 
 #include "DetourCommon.h"
 #include "DetourNavMesh.h"
@@ -73,29 +74,6 @@ struct TileCacheData
 	int dataSize = 0;
 };
 
-struct RasterizationContext
-{
-	rcHeightfield* solid = nullptr;
-	unsigned char* triAreas = nullptr;
-	rcHeightfieldLayerSet* lset = nullptr;
-	rcCompactHeightfield* chf = nullptr;
-	TileCacheData tiles[MAX_LAYERS]{};
-	int ntiles = 0;
-
-	~RasterizationContext()
-	{
-		rcFreeHeightField(solid);
-		delete[] triAreas;
-		rcFreeHeightfieldLayerSet(lset);
-		rcFreeCompactHeightfield(chf);
-		for (int i = 0; i < MAX_LAYERS; ++i)
-		{
-			dtFree(tiles[i].data);
-			tiles[i].data = nullptr;
-		}
-	}
-};
-
 struct TileCacheSetHeader
 {
 	int magic;
@@ -127,174 +105,68 @@ int rasterizeTileLayers(
 		return 0;
 	}
 
-	FastLZCompressor comp;
-	RasterizationContext rasterContext;
-
 	const float* verts = geom.mesh.verts.data();
 	const int nverts = geom.mesh.getVertCount();
 	const PartitionedMesh& partitionedMesh = geom.partitionedMesh;
 
-	const float tcs = cfg.tileSize * cfg.cs;
-
 	rcConfig tcfg;
-	std::memcpy(&tcfg, &cfg, sizeof(tcfg));
+	computeTileConfig(cfg, tileX, tileY, tcfg);
 
-	tcfg.bmin[0] = cfg.bmin[0] + tileX * tcs;
-	tcfg.bmin[1] = cfg.bmin[1];
-	tcfg.bmin[2] = cfg.bmin[2] + tileY * tcs;
-	tcfg.bmax[0] = cfg.bmin[0] + (tileX + 1) * tcs;
-	tcfg.bmax[1] = cfg.bmax[1];
-	tcfg.bmax[2] = cfg.bmin[2] + (tileY + 1) * tcs;
-	tcfg.bmin[0] -= static_cast<float>(tcfg.borderSize) * tcfg.cs;
-	tcfg.bmin[2] -= static_cast<float>(tcfg.borderSize) * tcfg.cs;
-	tcfg.bmax[0] += static_cast<float>(tcfg.borderSize) * tcfg.cs;
-	tcfg.bmax[2] += static_cast<float>(tcfg.borderSize) * tcfg.cs;
-
-	rasterContext.solid = rcAllocHeightfield();
-	if (!rasterContext.solid)
+	bool empty = false;
+	rcHeightfield* solid = rasterizeTileHeightfield(&ctx, tcfg, verts, nverts, partitionedMesh, bakeCfg, &empty);
+	if (!solid)
 	{
-		ctx.log(RC_LOG_ERROR, "buildNavigation: Out of memory 'solid'.");
-		return 0;
-	}
-	if (!rcCreateHeightfield(
-			&ctx,
-			*rasterContext.solid,
-			tcfg.width,
-			tcfg.height,
-			tcfg.bmin,
-			tcfg.bmax,
-			tcfg.cs,
-			tcfg.ch))
-	{
-		ctx.log(RC_LOG_ERROR, "buildNavigation: Could not create solid heightfield.");
-		return 0;
-	}
-
-	rasterContext.triAreas = new unsigned char[partitionedMesh.maxTrisPerChunk];
-	if (!rasterContext.triAreas)
-	{
-		ctx.log(RC_LOG_ERROR, "buildNavigation: Out of memory 'triAreas' (%d).", partitionedMesh.maxTrisPerChunk);
-		return 0;
-	}
-
-	float tbmin[2] = {tcfg.bmin[0], tcfg.bmin[2]};
-	float tbmax[2] = {tcfg.bmax[0], tcfg.bmax[2]};
-	std::vector<int> overlappingNodes;
-	partitionedMesh.GetNodesOverlappingRect(tbmin, tbmax, overlappingNodes);
-	if (overlappingNodes.empty())
-	{
-		return 0;
-	}
-
-	for (int nodeIndex : overlappingNodes)
-	{
-		const PartitionedMesh::Node& node = partitionedMesh.nodes[nodeIndex];
-		const int* tris = &partitionedMesh.tris[static_cast<size_t>(node.triIndex) * 3];
-		const int ntris = node.numTris;
-
-		std::memset(rasterContext.triAreas, 0, ntris * sizeof(unsigned char));
-		rcMarkWalkableTriangles(&ctx, tcfg.walkableSlopeAngle, verts, nverts, tris, ntris, rasterContext.triAreas);
-		if (!rcRasterizeTriangles(
-				&ctx,
-				verts,
-				nverts,
-				tris,
-				rasterContext.triAreas,
-				ntris,
-				*rasterContext.solid,
-				tcfg.walkableClimb))
+		if (!empty)
 		{
-			return 0;
+			ctx.log(RC_LOG_ERROR, "buildNavigation: Could not rasterize tile.");
 		}
-	}
-
-	if (bakeCfg.filterLowHangingObstacles)
-	{
-		rcFilterLowHangingWalkableObstacles(&ctx, tcfg.walkableClimb, *rasterContext.solid);
-	}
-	if (bakeCfg.filterLedgeSpans)
-	{
-		rcFilterLedgeSpans(&ctx, tcfg.walkableHeight, tcfg.walkableClimb, *rasterContext.solid);
-	}
-	if (bakeCfg.filterWalkableLowHeightSpans)
-	{
-		rcFilterWalkableLowHeightSpans(&ctx, tcfg.walkableHeight, *rasterContext.solid);
-	}
-
-	rasterContext.chf = rcAllocCompactHeightfield();
-	if (!rasterContext.chf)
-	{
-		ctx.log(RC_LOG_ERROR, "buildNavigation: Out of memory 'chf'.");
 		return 0;
 	}
-	if (!rcBuildCompactHeightfield(
-			&ctx, tcfg.walkableHeight, tcfg.walkableClimb, *rasterContext.solid, *rasterContext.chf))
+
+	rcCompactHeightfield* chf = rcAllocCompactHeightfield();
+	if (!chf || !rcBuildCompactHeightfield(&ctx, tcfg.walkableHeight, tcfg.walkableClimb, *solid, *chf))
 	{
 		ctx.log(RC_LOG_ERROR, "buildNavigation: Could not build compact data.");
+		rcFreeCompactHeightfield(chf);
+		rcFreeHeightField(solid);
 		return 0;
 	}
+	rcFreeHeightField(solid);
 
-	if (!rcErodeWalkableArea(&ctx, tcfg.walkableRadius, *rasterContext.chf))
+	if (!rcErodeWalkableArea(&ctx, tcfg.walkableRadius, *chf))
 	{
 		ctx.log(RC_LOG_ERROR, "buildNavigation: Could not erode.");
+		rcFreeCompactHeightfield(chf);
 		return 0;
 	}
 
 	for (ConvexVolume& vol : geom.convexVolumes)
 	{
-		rcMarkConvexPolyArea(
-			&ctx, vol.verts, vol.nverts, vol.hmin, vol.hmax, static_cast<unsigned char>(vol.area), *rasterContext.chf);
+		rcMarkConvexPolyArea(&ctx, vol.verts, vol.nverts, vol.hmin, vol.hmax, static_cast<unsigned char>(vol.area), *chf);
 	}
 
-	rasterContext.lset = rcAllocHeightfieldLayerSet();
-	if (!rasterContext.lset)
-	{
-		ctx.log(RC_LOG_ERROR, "buildNavigation: Out of memory 'lset'.");
-		return 0;
-	}
-	if (!rcBuildHeightfieldLayers(&ctx, *rasterContext.chf, tcfg.borderSize, tcfg.walkableHeight, *rasterContext.lset))
+	std::vector<CompressedTileLayer> layers;
+	if (!buildCompressedTileLayers(&ctx, *chf, tileX, tileY, tcfg.borderSize, tcfg.walkableHeight, layers))
 	{
 		ctx.log(RC_LOG_ERROR, "buildNavigation: Could not build heighfield layers.");
+		rcFreeCompactHeightfield(chf);
 		return 0;
 	}
-
-	rasterContext.ntiles = 0;
-	for (int i = 0; i < rcMin(rasterContext.lset->nlayers, MAX_LAYERS); ++i)
-	{
-		TileCacheData* tile = &rasterContext.tiles[rasterContext.ntiles++];
-		const rcHeightfieldLayer* layer = &rasterContext.lset->layers[i];
-
-		dtTileCacheLayerHeader header;
-		header.magic = DT_TILECACHE_MAGIC;
-		header.version = DT_TILECACHE_VERSION;
-		header.tx = tileX;
-		header.ty = tileY;
-		header.tlayer = i;
-		dtVcopy(header.bmin, layer->bmin);
-		dtVcopy(header.bmax, layer->bmax);
-		header.width = static_cast<unsigned char>(layer->width);
-		header.height = static_cast<unsigned char>(layer->height);
-		header.minx = static_cast<unsigned char>(layer->minx);
-		header.maxx = static_cast<unsigned char>(layer->maxx);
-		header.miny = static_cast<unsigned char>(layer->miny);
-		header.maxy = static_cast<unsigned char>(layer->maxy);
-		header.hmin = static_cast<unsigned short>(layer->hmin);
-		header.hmax = static_cast<unsigned short>(layer->hmax);
-
-		dtStatus status =
-			dtBuildTileCacheLayer(&comp, &header, layer->heights, layer->areas, layer->cons, &tile->data, &tile->dataSize);
-		if (dtStatusFailed(status))
-		{
-			return 0;
-		}
-	}
+	rcFreeCompactHeightfield(chf);
 
 	int n = 0;
-	for (int i = 0; i < rcMin(rasterContext.ntiles, maxTiles); ++i)
+	for (size_t i = 0; i < layers.size(); ++i)
 	{
-		tiles[n++] = rasterContext.tiles[i];
-		rasterContext.tiles[i].data = nullptr;
-		rasterContext.tiles[i].dataSize = 0;
+		if (n < maxTiles)
+		{
+			tiles[n].data = layers[i].data;
+			tiles[n].dataSize = layers[i].dataSize;
+			++n;
+		}
+		else
+		{
+			dtFree(layers[i].data);
+		}
 	}
 
 	return n;
@@ -402,26 +274,8 @@ bool bakeTempObstacles(InputGeom& geom, const BakeConfig& cfg, BuildContext& ctx
 	const int maxTiles = 1 << tileBits;
 	const int maxPolysPerTile = 1 << polyBits;
 
-	rcConfig rcCfg = {};
-	rcCfg.cs = cfg.cellSize;
-	rcCfg.ch = cfg.cellHeight;
-	rcCfg.walkableSlopeAngle = cfg.agentMaxSlope;
-	rcCfg.walkableHeight = static_cast<int>(ceilf(cfg.agentHeight / rcCfg.ch));
-	rcCfg.walkableClimb = static_cast<int>(floorf(cfg.agentMaxClimb / rcCfg.ch));
-	rcCfg.walkableRadius = static_cast<int>(ceilf(cfg.agentRadius / rcCfg.cs));
-	rcCfg.maxEdgeLen = static_cast<int>(cfg.edgeMaxLen / cfg.cellSize);
-	rcCfg.maxSimplificationError = cfg.edgeMaxError;
-	rcCfg.minRegionArea = static_cast<int>(rcSqr(cfg.regionMinSize));
-	rcCfg.mergeRegionArea = static_cast<int>(rcSqr(cfg.regionMergeSize));
-	rcCfg.maxVertsPerPoly = cfg.vertsPerPoly;
-	rcCfg.tileSize = cfg.tileSize;
-	rcCfg.borderSize = rcCfg.walkableRadius + 3;
-	rcCfg.width = rcCfg.tileSize + rcCfg.borderSize * 2;
-	rcCfg.height = rcCfg.tileSize + rcCfg.borderSize * 2;
-	rcCfg.detailSampleDist = cfg.detailSampleDist < 0.9f ? 0 : cfg.cellSize * cfg.detailSampleDist;
-	rcCfg.detailSampleMaxError = cfg.cellHeight * cfg.detailSampleMaxError;
-	rcVcopy(rcCfg.bmin, minBounds);
-	rcVcopy(rcCfg.bmax, maxBounds);
+	rcConfig rcCfg;
+	fillRcConfigTiled(cfg, minBounds, maxBounds, rcCfg);
 
 	dtTileCacheParams tcparams = {};
 	rcVcopy(tcparams.orig, minBounds);

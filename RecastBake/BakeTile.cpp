@@ -3,13 +3,12 @@
 #include "InputGeom.h"
 #include "SampleInterfaces.h"
 
+#include "RecastBakeCore/TileRasterizer.h"
+
 #include "DetourCommon.h"
 #include "DetourNavMesh.h"
 #include "DetourNavMeshBuilder.h"
 #include "Recast.h"
-
-#include <cstring>
-#include <vector>
 
 namespace
 {
@@ -35,81 +34,20 @@ unsigned char* buildTileMesh(
 	const int numVerts = geom.mesh.getVertCount();
 	const PartitionedMesh& partitionedMesh = geom.partitionedMesh;
 
-	rcConfig config = {};
-	config.cs = cfg.cellSize;
-	config.ch = cfg.cellHeight;
-	config.walkableSlopeAngle = cfg.agentMaxSlope;
-	config.walkableHeight = static_cast<int>(ceilf(cfg.agentHeight / config.ch));
-	config.walkableClimb = static_cast<int>(floorf(cfg.agentMaxClimb / config.ch));
-	config.walkableRadius = static_cast<int>(ceilf(cfg.agentRadius / config.cs));
-	config.maxEdgeLen = static_cast<int>(cfg.edgeMaxLen / cfg.cellSize);
-	config.maxSimplificationError = cfg.edgeMaxError;
-	config.minRegionArea = static_cast<int>(rcSqr(cfg.regionMinSize));
-	config.mergeRegionArea = static_cast<int>(rcSqr(cfg.regionMergeSize));
-	config.maxVertsPerPoly = cfg.vertsPerPoly;
-	config.tileSize = cfg.tileSize;
-	config.borderSize = config.walkableRadius + 3;
-	config.width = config.tileSize + config.borderSize * 2;
-	config.height = config.tileSize + config.borderSize * 2;
-	config.detailSampleDist = cfg.detailSampleDist < 0.9f ? 0 : cfg.cellSize * cfg.detailSampleDist;
-	config.detailSampleMaxError = cfg.cellHeight * cfg.detailSampleMaxError;
+	rcConfig baseCfg;
+	fillRcConfigTiled(cfg, geom.getNavMeshBoundsMin(), geom.getNavMeshBoundsMax(), baseCfg);
+	rcConfig config;
+	computeTileConfig(baseCfg, tileX, tileY, config);
 
-	rcVcopy(config.bmin, boundsMin);
-	rcVcopy(config.bmax, boundsMax);
-	config.bmin[0] -= static_cast<float>(config.borderSize) * config.cs;
-	config.bmin[2] -= static_cast<float>(config.borderSize) * config.cs;
-	config.bmax[0] += static_cast<float>(config.borderSize) * config.cs;
-	config.bmax[2] += static_cast<float>(config.borderSize) * config.cs;
-
-	rcHeightfield* heightfield = rcAllocHeightfield();
-	if (!heightfield ||
-	    !rcCreateHeightfield(&ctx, *heightfield, config.width, config.height, config.bmin, config.bmax, config.cs, config.ch))
+	bool empty = false;
+	rcHeightfield* heightfield = rasterizeTileHeightfield(&ctx, config, verts, numVerts, partitionedMesh, cfg, &empty);
+	if (!heightfield)
 	{
-		ctx.log(RC_LOG_ERROR, "buildNavigation: Could not create solid heightfield.");
-		rcFreeHeightField(heightfield);
-		return nullptr;
-	}
-
-	unsigned char* triAreas = new unsigned char[partitionedMesh.maxTrisPerChunk];
-	float tileBoundsMin[2] = {config.bmin[0], config.bmin[2]};
-	float tileBoundsMax[2] = {config.bmax[0], config.bmax[2]};
-	std::vector<int> overlappingNodes;
-	partitionedMesh.GetNodesOverlappingRect(tileBoundsMin, tileBoundsMax, overlappingNodes);
-	if (overlappingNodes.empty())
-	{
-		delete[] triAreas;
-		rcFreeHeightField(heightfield);
-		return nullptr;
-	}
-
-	for (int nodeIndex : overlappingNodes)
-	{
-		const PartitionedMesh::Node& node = partitionedMesh.nodes[nodeIndex];
-		const int* nodeTris = &partitionedMesh.tris[static_cast<size_t>(node.triIndex) * 3];
-		const int numNodeTris = node.numTris;
-		std::memset(triAreas, 0, numNodeTris * sizeof(unsigned char));
-		rcMarkWalkableTriangles(&ctx, config.walkableSlopeAngle, verts, numVerts, nodeTris, numNodeTris, triAreas);
-		if (!rcRasterizeTriangles(
-				&ctx, verts, numVerts, nodeTris, triAreas, numNodeTris, *heightfield, config.walkableClimb))
+		if (!empty)
 		{
-			delete[] triAreas;
-			rcFreeHeightField(heightfield);
-			return nullptr;
+			ctx.log(RC_LOG_ERROR, "buildNavigation: Could not rasterize tile.");
 		}
-	}
-	delete[] triAreas;
-
-	if (cfg.filterLowHangingObstacles)
-	{
-		rcFilterLowHangingWalkableObstacles(&ctx, config.walkableClimb, *heightfield);
-	}
-	if (cfg.filterLedgeSpans)
-	{
-		rcFilterLedgeSpans(&ctx, config.walkableHeight, config.walkableClimb, *heightfield);
-	}
-	if (cfg.filterWalkableLowHeightSpans)
-	{
-		rcFilterWalkableLowHeightSpans(&ctx, config.walkableHeight, *heightfield);
+		return nullptr;
 	}
 
 	rcCompactHeightfield* chf = rcAllocCompactHeightfield();

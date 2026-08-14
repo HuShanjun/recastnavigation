@@ -9,7 +9,6 @@ target_sources(RecastBake PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/BakeTile.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/BakeTempObstacles.cpp
 	${CMAKE_SOURCE_DIR}/RecastDemo/Source/InputGeom.cpp
-	${CMAKE_SOURCE_DIR}/RecastDemo/Source/PartitionedMesh.cpp
 	${CMAKE_SOURCE_DIR}/RecastDemo/Source/PerfTimer.cpp
 )
 
