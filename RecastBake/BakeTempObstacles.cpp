@@ -3,14 +3,14 @@
 #include "InputGeom.h"
 #include "SampleInterfaces.h"
 
+#include "RecastBakeCore/TileCacheCompression.h"
+
 #include "DetourCommon.h"
 #include "DetourNavMesh.h"
 #include "DetourNavMeshBuilder.h"
 #include "DetourTileCache.h"
 #include "DetourTileCacheBuilder.h"
 #include "Recast.h"
-
-#include <fastlz.h>
 
 #include <cstdio>
 #include <cstring>
@@ -21,84 +21,6 @@ namespace
 constexpr int MAX_LAYERS = 32;
 constexpr int TILECACHESET_MAGIC = 'T' << 24 | 'S' << 16 | 'E' << 8 | 'T';
 constexpr int TILECACHESET_VERSION = 1;
-
-struct FastLZCompressor : dtTileCacheCompressor
-{
-	~FastLZCompressor() override = default;
-
-	int maxCompressedSize(const int bufferSize) override
-	{
-		return static_cast<int>(static_cast<float>(bufferSize) * 1.05f);
-	}
-
-	dtStatus compress(
-		const unsigned char* buffer,
-		const int bufferSize,
-		unsigned char* compressed,
-		const int /*maxCompressedSize*/,
-		int* compressedSize) override
-	{
-		*compressedSize = fastlz_compress(buffer, bufferSize, compressed);
-		return DT_SUCCESS;
-	}
-
-	dtStatus decompress(
-		const unsigned char* compressed,
-		const int compressedSize,
-		unsigned char* buffer,
-		const int maxBufferSize,
-		int* bufferSize) override
-	{
-		*bufferSize = fastlz_decompress(compressed, compressedSize, buffer, maxBufferSize);
-		return *bufferSize < 0 ? DT_FAILURE : DT_SUCCESS;
-	}
-};
-
-struct LinearAllocator : dtTileCacheAlloc
-{
-	unsigned char* buffer = nullptr;
-	size_t capacity = 0;
-	size_t top = 0;
-	size_t high = 0;
-
-	explicit LinearAllocator(const size_t cap) { resize(cap); }
-
-	~LinearAllocator() override { dtFree(buffer); }
-
-	void resize(const size_t cap)
-	{
-		if (buffer)
-		{
-			dtFree(buffer);
-		}
-		buffer = static_cast<unsigned char*>(dtAlloc(cap, DT_ALLOC_PERM));
-		capacity = cap;
-	}
-
-	void reset() override
-	{
-		high = dtMax(high, top);
-		top = 0;
-	}
-
-	void* alloc(const size_t size) override
-	{
-		if (!buffer)
-		{
-			return nullptr;
-		}
-		if (top + size > capacity)
-		{
-			return nullptr;
-		}
-
-		unsigned char* mem = &buffer[top];
-		top += size;
-		return mem;
-	}
-
-	void free(void* /*ptr*/) override {}
-};
 
 struct MeshProcess : dtTileCacheMeshProcess
 {
