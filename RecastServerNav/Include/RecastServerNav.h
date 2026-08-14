@@ -26,9 +26,11 @@ public:
 
 	void tick(float dt);
 
+	// 添加临时障碍物
 	dtObstacleRef addBoxObstacle(const float* center, const float* halfExtents);
 	bool removeObstacle(dtObstacleRef ref);
 
+	// 添加永久障碍物
 	unsigned int addPermanentBox(const float* bmin, const float* bmax);
 	bool removePermanentBox(unsigned int id);
 	unsigned int addPermanentMeshObject(
