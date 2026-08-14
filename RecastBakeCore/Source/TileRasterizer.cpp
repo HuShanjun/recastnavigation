@@ -147,6 +147,24 @@ rcHeightfield* rasterizeTileHeightfield(
 	return heightfield;
 }
 
+bool rasterizeExtraTriangles(
+	rcContext* ctx,
+	const rcConfig& tileCfg,
+	const float* verts, const int nverts,
+	const int* tris, const int ntris,
+	const BakeCoreParams& /*params*/,
+	rcHeightfield& solid)
+{
+	if (!ctx || !verts || nverts <= 0 || !tris || ntris <= 0)
+	{
+		return false;
+	}
+
+	std::vector<unsigned char> triAreas(static_cast<size_t>(ntris), 0);
+	rcMarkWalkableTriangles(ctx, tileCfg.walkableSlopeAngle, verts, nverts, tris, ntris, triAreas.data());
+	return rcRasterizeTriangles(ctx, verts, nverts, tris, triAreas.data(), ntris, solid, tileCfg.walkableClimb);
+}
+
 bool buildCompressedTileLayers(
 	rcContext* ctx,
 	rcCompactHeightfield& chf,

@@ -27,3 +27,35 @@ TEST_CASE("computeTileConfig offsets bmin/bmax by tile index and expands border"
 	REQUIRE(tile10.bmin[0] == Catch::Approx(tcs - border));
 	REQUIRE(tile10.bmax[0] == Catch::Approx(2 * tcs + border));
 }
+
+TEST_CASE("rasterizeExtraTriangles adds spans to an existing heightfield", "[RecastBakeCore]")
+{
+	BakeCoreParams params;
+	params.cellSize = 0.3f;
+	params.cellHeight = 0.2f;
+
+	float meshBmin[3] = {0.0f, 0.0f, 0.0f};
+	float meshBmax[3] = {20.0f, 5.0f, 20.0f};
+	rcConfig cfg;
+	fillRcConfigSolo(params, meshBmin, meshBmax, cfg);
+
+	rcContext ctx;
+	rcHeightfield* solid = rcAllocHeightfield();
+	REQUIRE(rcCreateHeightfield(&ctx, *solid, cfg.width, cfg.height, cfg.bmin, cfg.bmax, cfg.cs, cfg.ch));
+
+	// A vertical quad wall (2 triangles) from (5,0,5) to (6,3,15).
+	float verts[12] = {
+		5,0,5,  6,0,5,  6,3,15,  5,3,15};
+	int tris[6] = {0,1,2, 0,2,3};
+
+	REQUIRE(rasterizeExtraTriangles(&ctx, cfg, verts, 4, tris, 2, params, *solid));
+
+	bool foundSpan = false;
+	for (int z = 0; z < solid->height && !foundSpan; ++z)
+		for (int x = 0; x < solid->width && !foundSpan; ++x)
+			if (solid->spans[x + z * solid->width] != nullptr)
+				foundSpan = true;
+	REQUIRE(foundSpan);
+
+	rcFreeHeightField(solid);
+}
