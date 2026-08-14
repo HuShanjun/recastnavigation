@@ -3,6 +3,7 @@ add_library(RecastBakeCore STATIC)
 target_sources(RecastBakeCore PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/Source/TileCacheCompression.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/Source/TileRasterizer.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/Source/TileCacheSetIO.cpp
 	${CMAKE_SOURCE_DIR}/RecastDemo/Source/PartitionedMesh.cpp
 	${CMAKE_SOURCE_DIR}/RecastDemo/Contrib/fastlz/fastlz.c
 )

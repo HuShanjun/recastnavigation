@@ -4,6 +4,7 @@
 #include "SampleInterfaces.h"
 
 #include "RecastBakeCore/TileCacheCompression.h"
+#include "RecastBakeCore/TileCacheSetIO.h"
 #include "RecastBakeCore/TileRasterizer.h"
 
 #include "DetourCommon.h"
@@ -20,8 +21,6 @@
 namespace
 {
 constexpr int MAX_LAYERS = 32;
-constexpr int TILECACHESET_MAGIC = 'T' << 24 | 'S' << 16 | 'E' << 8 | 'T';
-constexpr int TILECACHESET_VERSION = 1;
 
 struct MeshProcess : dtTileCacheMeshProcess
 {
@@ -72,21 +71,6 @@ struct TileCacheData
 {
 	unsigned char* data = nullptr;
 	int dataSize = 0;
-};
-
-struct TileCacheSetHeader
-{
-	int magic;
-	int version;
-	int numTiles;
-	dtNavMeshParams meshParams;
-	dtTileCacheParams cacheParams;
-};
-
-struct TileCacheTileHeader
-{
-	dtCompressedTileRef tileRef;
-	int dataSize;
 };
 
 int rasterizeTileLayers(
@@ -172,72 +156,6 @@ int rasterizeTileLayers(
 	return n;
 }
 
-bool saveTileCacheSet(const char* path, const dtTileCache* tileCache, const dtNavMesh* navMesh)
-{
-	if (!tileCache || !navMesh)
-	{
-		return false;
-	}
-
-	FILE* fp = std::fopen(path, "wb");
-	if (!fp)
-	{
-		return false;
-	}
-
-	TileCacheSetHeader header;
-	header.magic = TILECACHESET_MAGIC;
-	header.version = TILECACHESET_VERSION;
-	header.numTiles = 0;
-	for (int i = 0; i < tileCache->getTileCount(); ++i)
-	{
-		const dtCompressedTile* tile = tileCache->getTile(i);
-		if (!tile || !tile->header || !tile->dataSize)
-		{
-			continue;
-		}
-		header.numTiles++;
-	}
-	std::memcpy(&header.cacheParams, tileCache->getParams(), sizeof(dtTileCacheParams));
-	std::memcpy(&header.meshParams, navMesh->getParams(), sizeof(dtNavMeshParams));
-	std::fwrite(&header, sizeof(TileCacheSetHeader), 1, fp);
-
-	for (int i = 0; i < tileCache->getTileCount(); ++i)
-	{
-		const dtCompressedTile* tile = tileCache->getTile(i);
-		if (!tile || !tile->header || !tile->dataSize)
-		{
-			continue;
-		}
-
-		TileCacheTileHeader tileHeader;
-		tileHeader.tileRef = tileCache->getTileRef(tile);
-		tileHeader.dataSize = tile->dataSize;
-		std::fwrite(&tileHeader, sizeof(tileHeader), 1, fp);
-		std::fwrite(tile->data, tile->dataSize, 1, fp);
-	}
-
-	std::fclose(fp);
-	return true;
-}
-
-int countTileCacheTiles(const dtTileCache* tileCache)
-{
-	if (!tileCache)
-	{
-		return 0;
-	}
-	int count = 0;
-	for (int i = 0; i < tileCache->getTileCount(); ++i)
-	{
-		const dtCompressedTile* tile = tileCache->getTile(i);
-		if (tile && tile->header && tile->dataSize)
-		{
-			++count;
-		}
-	}
-	return count;
-}
 } // namespace
 
 bool bakeTempObstacles(InputGeom& geom, const BakeConfig& cfg, BuildContext& ctx, const char* outPath, int& outTileCount)
