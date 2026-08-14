@@ -31,6 +31,11 @@ public:
 
 	unsigned int addPermanentBox(const float* bmin, const float* bmax);
 	bool removePermanentBox(unsigned int id);
+	unsigned int addPermanentMeshObject(
+		const float* verts, int nverts,
+		const int* tris, int ntris,
+		float outBmin[3], float outBmax[3]);
+	bool removePermanentMeshObject(unsigned int id);
 	bool commitPermanentBounds(const float* bmin, const float* bmax);
 	/// Number of tiles that would be enqueued for the AABB (0 if unavailable).
 	int countTilesForBounds(const float* bmin, const float* bmax) const;

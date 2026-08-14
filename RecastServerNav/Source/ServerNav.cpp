@@ -8,6 +8,8 @@
 #include "InputGeom.h"
 #include "SampleInterfaces.h"
 
+#include <algorithm>
+#include <cfloat>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -156,6 +158,8 @@ struct ServerNav::Impl
 	ServerBakeParams bakeParams = ServerBakeParams::defaults();
 	std::vector<PermanentBox> permanentBoxes;
 	unsigned int nextPermanentBoxId = 1;
+	std::vector<PermanentMeshObject> permanentMeshObjects;
+	unsigned int nextPermanentMeshId = 1;
 
 	void clearQuery()
 	{
@@ -402,6 +406,66 @@ bool ServerNav::removePermanentBox(unsigned int id)
 		if (it->id == id)
 		{
 			m->permanentBoxes.erase(it);
+			return true;
+		}
+	}
+	return false;
+}
+
+unsigned int ServerNav::addPermanentMeshObject(
+	const float* verts, const int nverts,
+	const int* tris, const int ntris,
+	float outBmin[3], float outBmax[3])
+{
+	if (!m || !verts || nverts <= 0 || !tris || ntris <= 0 || !outBmin || !outBmax)
+	{
+		return 0;
+	}
+	for (int i = 0; i < ntris * 3; ++i)
+	{
+		if (tris[i] < 0 || tris[i] >= nverts)
+		{
+			return 0;
+		}
+	}
+	if (m->nextPermanentMeshId == 0)
+	{
+		return 0;
+	}
+
+	PermanentMeshObject obj{};
+	obj.verts.assign(verts, verts + static_cast<size_t>(nverts) * 3);
+	obj.tris.assign(tris, tris + static_cast<size_t>(ntris) * 3);
+	obj.bmin[0] = obj.bmin[1] = obj.bmin[2] = FLT_MAX;
+	obj.bmax[0] = obj.bmax[1] = obj.bmax[2] = -FLT_MAX;
+	for (int i = 0; i < nverts; ++i)
+	{
+		for (int axis = 0; axis < 3; ++axis)
+		{
+			const float v = verts[static_cast<size_t>(i) * 3 + axis];
+			obj.bmin[axis] = std::min(obj.bmin[axis], v);
+			obj.bmax[axis] = std::max(obj.bmax[axis], v);
+		}
+	}
+	obj.id = m->nextPermanentMeshId++;
+
+	std::memcpy(outBmin, obj.bmin, sizeof(obj.bmin));
+	std::memcpy(outBmax, obj.bmax, sizeof(obj.bmax));
+	m->permanentMeshObjects.push_back(std::move(obj));
+	return m->permanentMeshObjects.back().id;
+}
+
+bool ServerNav::removePermanentMeshObject(unsigned int id)
+{
+	if (!m || id == 0)
+	{
+		return false;
+	}
+	for (auto it = m->permanentMeshObjects.begin(); it != m->permanentMeshObjects.end(); ++it)
+	{
+		if (it->id == id)
+		{
+			m->permanentMeshObjects.erase(it);
 			return true;
 		}
 	}
