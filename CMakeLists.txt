@@ -57,8 +57,9 @@ else()
 endif()
 
 # Debug symbols
-set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>")
-if(NOT MSVC)
+if(MSVC)
+    set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>")
+else()
     add_compile_options(-g)
 endif()
 
@@ -96,6 +97,7 @@ add_subdirectory(RecastBakeCore)
 add_subdirectory(RecastBake)
 add_subdirectory(RecastServerNav)
 add_subdirectory(RecastServerNavDemo)
+add_subdirectory(RecastSample)
 
 configure_package_config_file(
     ${PROJECT_SOURCE_DIR}/recastnavigation-config.cmake.in

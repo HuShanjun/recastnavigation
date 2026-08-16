@@ -63,3 +63,6 @@ build
 ## IDE files
 .idea/
 cmake-build-*/
+/libs
+/bake_config_test.toml
+/bin

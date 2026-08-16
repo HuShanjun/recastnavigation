@@ -1468,14 +1468,20 @@ void NavMeshTesterTool::render()
 
 void NavMeshTesterTool::drawOverlayUI()
 {
+	char label[96];
+
 	if (sposSet)
 	{
-		DrawWorldspaceText(spos[0], spos[1], spos[2], IM_COL32(0, 0, 0, 220), "Start", true);
+		snprintf(label, sizeof(label), "Start (%.3f, %.3f, %.3f)", spos[0], spos[1], spos[2]);
+		DrawWorldspaceText(spos[0], spos[1], spos[2], IM_COL32(0, 0, 0, 220), label, true);
+		DrawScreenspaceText(280, 60, IM_COL32(255, 192, 128, 220), label);
 	}
 
 	if (eposSet)
 	{
-		DrawWorldspaceText(epos[0], epos[1], epos[2], IM_COL32(0, 0, 0, 220), "End", true);
+		snprintf(label, sizeof(label), "End (%.3f, %.3f, %.3f)", epos[0], epos[1], epos[2]);
+		DrawWorldspaceText(epos[0], epos[1], epos[2], IM_COL32(0, 0, 0, 220), label, true);
+		DrawScreenspaceText(280, 80, IM_COL32(128, 255, 160, 220), label);
 	}
 
 	// Tool help

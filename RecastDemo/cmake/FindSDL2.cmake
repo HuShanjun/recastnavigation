@@ -35,6 +35,7 @@ if(WIN32)
 	endif()
 endif()
 
+message(STATUS "SDL2_PREFIX: ${SDL2_PREFIX}")
 if(SDL2_PREFIX)
 	set(SDL2_ORIGPREFIXPATH ${CMAKE_PREFIX_PATH})
 	if(SDL2_ROOT_DIR)
@@ -49,6 +50,8 @@ if(SDL2_PREFIX)
 		list(APPEND CMAKE_PREFIX_PATH ${MINGWSEARCH_PREFIXES})
 	endif()
 endif()
+
+message(STATUS "CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
 
 # Invoke pkgconfig for hints
 find_package(PkgConfig QUIET)
